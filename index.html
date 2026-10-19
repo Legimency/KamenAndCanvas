@@ -1,0 +1,2079 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kamen &amp; Canvas</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%93%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #board { position:fixed; inset:0; display:block; touch-action:none; user-select:none; -webkit-user-select:none; }
+
+  .panel { background:#ffffff; border-radius:12px; box-shadow:0 4px 16px rgba(15,23,42,.12), 0 1px 2px rgba(15,23,42,.08); }
+
+  /* Левая панель инструментов */
+  #toolbar { position:fixed; left:12px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:2px; padding:6px; z-index:20; }
+  /* на низких экранах тулбар не наезжает на бренд сверху */
+  @media (max-height:600px) { #toolbar { top:64px; transform:none; } }
+  .tool-btn { position:relative; width:38px; height:38px; border:none; background:transparent; border-radius:9px; display:flex; align-items:center; justify-content:center; color:#374151; cursor:pointer; transition:background .12s, color .12s; }
+  .tool-dot { position:absolute; top:3px; right:3px; width:6px; height:6px; border-radius:9999px; background:#6366f1; box-shadow:0 0 0 1.5px #fff; opacity:0; transition:opacity .15s; }
+  .tool-dot.on { opacity:1; }
+  .tool-btn:hover { background:#f1f5f9; }
+  .tool-btn.active { background:#e0e7ff; color:#4338ca; }
+  .tool-btn svg { width:20px; height:20px; }
+
+  /* Верхняя панель свойств */
+  #properties { position:fixed; top:12px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:6px; padding:6px 10px; z-index:20; max-width:96vw; flex-wrap:wrap; justify-content:center; }
+  .prop-group { display:flex; align-items:center; gap:4px; }
+  .sep { width:1px; height:22px; background:#e5e7eb; margin:0 2px; }
+  .icon-btn { width:30px; height:30px; border:none; background:transparent; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#374151; cursor:pointer; }
+  .icon-btn:hover:not(:disabled) { background:#f1f5f9; }
+  .icon-btn:disabled { opacity:.35; cursor:default; }
+  .icon-btn svg { width:18px; height:18px; }
+
+  .swatch { width:22px; height:22px; border-radius:9999px; border:1px solid rgba(0,0,0,.12); cursor:pointer; padding:0; position:relative; }
+  .swatch.active { box-shadow:0 0 0 2px #fff, 0 0 0 4px #6366f1; }
+  .swatch.transparent { background:#fff; }
+  .swatch.transparent::after { content:""; position:absolute; left:2px; right:2px; top:50%; height:1.5px; background:#ef4444; transform:rotate(-45deg); }
+
+  .opt-btn { border:none; background:transparent; border-radius:7px; padding:4px; cursor:pointer; color:#374151; display:flex; align-items:center; justify-content:center; }
+  .opt-btn:hover { background:#f1f5f9; }
+  .opt-btn.active { background:#e0e7ff; color:#4338ca; }
+  .opt-btn svg { width:18px; height:18px; display:block; }
+  .opt-text { font-size:12px; font-weight:600; padding:2px 6px; }
+
+  /* Нижняя панель зума */
+  #zoomPanel { position:fixed; left:12px; bottom:12px; display:flex; align-items:center; gap:2px; padding:5px 7px; z-index:20; }
+  #zoomLabel { font-size:12px; color:#475569; min-width:42px; text-align:center; }
+
+  /* Меню */
+  #menuWrap { position:fixed; left:12px; bottom:58px; z-index:20; }
+  #menu { position:absolute; bottom:38px; left:0; width:190px; padding:6px; display:none; flex-direction:column; }
+  #menu.open { display:flex; }
+  .menu-item { text-align:left; border:none; background:transparent; padding:7px 10px; border-radius:7px; font-size:13px; color:#374151; cursor:pointer; }
+  .menu-item:hover { background:#f1f5f9; }
+  .menu-label { font-size:11px; color:#94a3b8; padding:6px 10px 2px; }
+  .menu-row { display:flex; gap:4px; padding:2px 8px 6px; }
+  .menu-chip { flex:1; border:1px solid #e5e7eb; background:#fff; border-radius:7px; font-size:12px; padding:4px 6px; cursor:pointer; color:#374151; }
+  .menu-chip:hover { background:#f1f5f9; }
+  .menu-chip.active { background:#e0e7ff; border-color:#c7d2fe; color:#4338ca; }
+  .icon-btn.active { background:#e0e7ff; color:#4338ca; }
+
+  /* ===== Попувер «как рисовать фигуру» ===== */
+  #drawModePop {
+    position:fixed; width:214px; padding:8px; z-index:30;
+    opacity:0; transform:translateX(-6px) scale(.97); pointer-events:none;
+    transition:opacity .14s ease, transform .14s ease;
+  }
+  #drawModePop.open { opacity:1; transform:none; pointer-events:auto; }
+  .dm-title { font-family:"Caveat",cursive; font-size:20px; line-height:1.1; color:#0f172a; padding:2px 6px 6px; }
+  .dm-opt {
+    display:flex; gap:9px; align-items:center; width:100%; text-align:left;
+    border:1px solid transparent; background:transparent; border-radius:9px;
+    padding:6px; cursor:pointer; transition:background .12s, border-color .12s;
+  }
+  .dm-opt:hover { background:#f1f5f9; }
+  .dm-opt.active { background:#eef2ff; border-color:#c7d2fe; }
+  .dm-opt svg { width:26px; height:26px; flex:0 0 26px; color:#475569; }
+  .dm-opt.active svg { color:#4338ca; }
+  .dm-opt b { display:block; font-size:12.5px; font-weight:600; color:#111827; }
+  .dm-opt i { display:block; font-style:normal; font-size:11px; color:#94a3b8; line-height:1.25; }
+  .dm-note { font-size:10.5px; color:#94a3b8; padding:7px 6px 2px; border-top:1px solid #f1f5f9; margin-top:5px; }
+  .dm-note kbd { font-family:ui-monospace,Menlo,Consolas,monospace; background:#f1f5f9; border-radius:4px; padding:1px 4px; color:#475569; font-size:10px; }
+
+  /* ===== Бренд слева сверху ===== */
+  #brand {
+    position:fixed; top:14px; left:14px; z-index:25;
+    display:inline-flex; flex-direction:column; align-items:flex-start;
+    text-decoration:none; cursor:pointer; user-select:none;
+    padding:6px 10px 6px; border-radius:12px;
+    transition:background .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+  #brand .brand-name {
+    font-family:"Caveat",cursive; font-weight:600; font-size:22px; line-height:1;
+    color:#0f172a; letter-spacing:.2px; position:relative;
+    transition:color .18s ease;
+  }
+  #brand .brand-name::after {
+    content:""; position:absolute; left:0; right:0; bottom:-3px; height:2px;
+    background:linear-gradient(90deg,#6366f1,#a855f7); border-radius:2px;
+    transform:scaleX(0); transform-origin:left; transition:transform .22s ease;
+  }
+  #brand .brand-cta {
+    font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:#6366f1; font-weight:700;
+    margin-top:5px; max-height:0; opacity:0; overflow:hidden; transform:translateY(-4px);
+    transition:max-height .22s ease, opacity .18s ease, transform .22s ease;
+  }
+  #brand:hover { background:#fff; box-shadow:0 4px 16px rgba(15,23,42,.12), 0 1px 2px rgba(15,23,42,.08); transform:translateY(-1px); }
+  #brand:hover .brand-name { color:#4338ca; }
+  #brand:hover .brand-name::after { transform:scaleX(1); }
+  #brand:hover .brand-cta { max-height:16px; opacity:1; transform:none; }
+  #brand:active { transform:translateY(0) scale(.98); }
+
+  /* ===== Панель горячих клавиш ===== */
+  #helpPanel {
+    position:fixed; left:12px; bottom:58px; width:308px; z-index:30;
+    background:#0f172a; color:#e2e8f0; border-radius:14px; padding:14px 14px 10px;
+    box-shadow:0 18px 44px rgba(2,6,23,.38), 0 2px 6px rgba(2,6,23,.28);
+    opacity:0; transform:translateY(8px) scale(.98); pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease;
+    max-height:min(70vh, 560px); overflow:auto;
+  }
+  #helpPanel.open { opacity:1; transform:none; pointer-events:auto; }
+  .hp-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:9px; }
+  .hp-title { font-family:"Caveat",cursive; font-size:30px; line-height:.95; color:#fff; letter-spacing:.2px; }
+  .hp-sub { font-size:10.5px; color:#64748b; margin-top:-2px; }
+  #helpClose { border:none; background:rgba(255,255,255,.07); color:#94a3b8; width:22px; height:22px; border-radius:7px; cursor:pointer; font-size:14px; line-height:1; }
+  #helpClose:hover { background:rgba(255,255,255,.16); color:#fff; }
+  .hp-sec { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#6366f1; font-weight:700; margin:11px 0 5px; }
+  .hp-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:3.5px 0; font-size:12px; color:#cbd5e1; }
+  .hp-row:hover { color:#fff; }
+  .hp-keys { display:flex; gap:3px; flex:0 0 auto; }
+  .hp-keys kbd {
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10.5px;
+    background:#1e293b; border:1px solid #334155; border-bottom-width:2px;
+    border-radius:5px; padding:2px 5px; color:#e2e8f0; white-space:nowrap;
+  }
+
+  /* Временный ввод текста */
+  .board-text-input { position:fixed; z-index:40; margin:0; padding:2px 3px; min-width:60px; background:transparent; border:1px dashed #6965db; border-radius:3px; outline:none; resize:none; overflow:hidden; white-space:pre; box-sizing:border-box; line-height:1.25; caret-color:#6965db; }
+  .board-text-input.centered { text-align:center; white-space:pre-wrap; overflow:hidden; }
+
+  #toast { position:fixed; top:16px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; font-size:13px; padding:7px 14px; border-radius:9px; opacity:0; transition:opacity .2s; z-index:50; pointer-events:none; }
+  #toast.show { opacity:.95; }
+</style>
+</head>
+<body class="bg-white">
+
+<canvas id="board"></canvas>
+
+<!-- Бренд -->
+<a id="brand" href="https://legimency.github.io/kamen3D/" target="_blank" rel="noopener noreferrer" title="Kamen & Canvas">
+  <span class="brand-name">Kamen &amp; Canvas</span>
+  <span class="brand-cta">нажми →</span>
+</a>
+
+<!-- Инструменты -->
+<div id="toolbar" class="panel"></div>
+
+<!-- Свойства -->
+<div id="properties" class="panel"></div>
+
+<!-- Зум + меню -->
+<div id="menuWrap">
+  <div id="menu" class="panel">
+    <button class="menu-item" data-act="png">📷 Экспорт в PNG</button>
+    <button class="menu-item" data-act="fit">⤢ По размеру (Shift+1)</button>
+    <button class="menu-item" data-act="reset">⟳ Сбросить зум (Ctrl+0)</button>
+    <div class="sep" style="width:100%;height:1px;margin:4px 0;"></div>
+    <div class="menu-label">Фон</div>
+    <div class="menu-row">
+      <button class="menu-chip" data-bg="dots">Точки</button>
+      <button class="menu-chip" data-bg="lines">Сетка</button>
+      <button class="menu-chip" data-bg="none">Пусто</button>
+    </div>
+    <div class="menu-label">Перемещение</div>
+    <div class="menu-row">
+      <button class="menu-chip" data-snap="free">Свободно</button>
+      <button class="menu-chip" data-snap="grid">По сетке</button>
+    </div>
+    <div class="sep" style="width:100%;height:1px;margin:4px 0;"></div>
+    <button class="menu-item" data-act="clear" style="color:#dc2626">🗑 Очистить доску</button>
+  </div>
+  <button id="menuBtn" class="icon-btn panel" title="Меню" style="width:38px;height:34px;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+</div>
+
+<div id="zoomPanel" class="panel">
+  <button id="zoomOut" class="icon-btn" title="Уменьшить (Ctrl+-)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+  </button>
+  <span id="zoomLabel">100%</span>
+  <button id="zoomIn" class="icon-btn" title="Увеличить (Ctrl+=)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <div class="sep"></div>
+  <button id="snapBtn" class="icon-btn" title="Привязка к сетке (G)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v7a7 7 0 0014 0V3h-4v7a3 3 0 01-6 0V3z"/><path d="M5 6h4M15 6h4"/></svg>
+  </button>
+  <button id="helpBtn" class="icon-btn" title="Горячие клавиши (?)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 114 2.2c-.9.6-1.6 1.1-1.6 2.1"/><path d="M12 17.2h.01"/></svg>
+  </button>
+</div>
+
+<!-- Попувер: как рисовать фигуру -->
+<div id="drawModePop" class="panel">
+  <div class="dm-title">Как рисовать фигуру?</div>
+  <button class="dm-opt" data-dm="corner">
+    <svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4v5M4 4h5"/><rect x="4" y="4" width="17" height="13" rx="1.5" stroke-dasharray="2.6 2.4"/>
+    </svg>
+    <span><b>От угла</b><i>точка нажатия — угол фигуры</i></span>
+  </button>
+  <button class="dm-opt" data-dm="center">
+    <svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="13" cy="13" r="8.5" stroke-dasharray="2.6 2.4"/><circle cx="13" cy="13" r="1.6" fill="currentColor" stroke="none"/>
+      <path d="M13 2.6v3M13 20.4v3M2.6 13h3M20.4 13h3"/>
+    </svg>
+    <span><b>От центра</b><i>точка нажатия — центр и радиус</i></span>
+  </button>
+  <div class="dm-note"><kbd>Shift</kbd> во время рисования — ровный круг, квадрат или ромб</div>
+</div>
+
+<!-- Панель горячих клавиш -->
+<div id="helpPanel">
+  <div class="hp-head">
+    <div>
+      <div class="hp-title">Горячие клавиши</div>
+      <div class="hp-sub">всё, что умеет доска</div>
+    </div>
+    <button id="helpClose" title="Закрыть">×</button>
+  </div>
+  <div id="helpBody"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================ DOM ============================ */
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const toolbar = document.getElementById("toolbar");
+  const props = document.getElementById("properties");
+  const zoomLabel = document.getElementById("zoomLabel");
+  const menu = document.getElementById("menu");
+  const toastEl = document.getElementById("toast");
+  let dpr = window.devicePixelRatio || 1;
+
+  /* ============================ Константы ============================ */
+  const STROKE_COLORS = ["#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"];
+  const BG_COLORS = ["transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99"];
+  const FILLS = [
+    { v: "hachure", t: "Штриховка" },
+    { v: "cross-hatch", t: "Сетка" },
+    { v: "solid", t: "Заливка" }
+  ];
+  const WIDTHS = [1, 2, 4];
+  const STYLES = [
+    { v: "solid", t: "Сплошная" },
+    { v: "dashed", t: "Пунктир" },
+    { v: "dotted", t: "Точки" }
+  ];
+  const SLOP = [
+    { v: 1, t: "Художник" },
+    { v: 0, t: "Архитектор" },
+    { v: 2, t: "Карикатура" }
+  ];
+  const FONT_SIZES = [
+    { v: 20, t: "S" },
+    { v: 28, t: "M" },
+    { v: 40, t: "L" }
+  ];
+  const FONT_FAMS = [
+    { v: 1, t: "Рукописный" },
+    { v: 2, t: "Обычный" },
+    { v: 3, t: "Код" }
+  ];
+  const FONTS = {
+    1: '"Caveat","Segoe Print","Comic Sans MS","Segoe UI",cursive',
+    2: 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif',
+    3: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'
+  };
+  const getFont = (size, fam) => size + "px " + FONTS[fam || 1];
+  const SEL_COLOR = "#6965db";
+
+  const ICONS = {
+    selection: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l7 17 2.5-7.5L20 11z"/></svg>',
+    hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5a2 2 0 114 0v6"/><path d="M12 11V4a2 2 0 114 0v8"/><path d="M16 12.5V7a2 2 0 114 0v7a6 6 0 01-6 6h-1a6 6 0 01-6-6v-2.5a2 2 0 114 0"/></svg>',
+    rectangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="2"/></svg>',
+    diamond: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 4l8 8-8 8-8-8z"/></svg>',
+    ellipse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="8.5" ry="7"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19L19 6"/><path d="M14 6h5v5"/></svg>',
+    line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 19L19 5"/></svg>',
+    freedraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3.5-.8L19 7.7 16.3 5 4.8 16.5z"/><path d="M15 6l3 3"/></svg>',
+    text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6h12"/><path d="M12 6v13"/></svg>',
+    eraser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h11"/><path d="M4 15l7-7 8 8-3 3H8z"/><path d="M11 8l6-6a2 2 0 013 3l-6 6"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-15-6.7L3 13"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0115-6.7L21 13"/></svg>',
+    fillHachure: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M5 9l6 6M8 5l8 8M12 5l6 6"/></svg>',
+    fillCross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M5 9l5 5M9 5l6 6M19 15l-5-5M15 19l-6-6"/></svg>',
+    fillSolid: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',
+    w1: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round"><path d="M4 12h16" stroke-width="1.5"/></svg>',
+    w2: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round"><path d="M4 12h16" stroke-width="3"/></svg>',
+    w4: '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round"><path d="M4 12h16" stroke-width="5.5"/></svg>',
+    sSolid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16"/></svg>',
+    sDashed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h5m3 0h5m3 0h0"/></svg>',
+    sDotted: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="10" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="20" cy="12" r="1.6"/></svg>',
+    sl0: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12h16"/></svg>',
+    sl1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12q3-3 6 0t6 0 4-1"/></svg>',
+    sl2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 11q2-4 5 1t4-2 5 3"/></svg>',
+    edgeRound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="5"/></svg>',
+    edgeSharp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="0"/></svg>',
+    edgePlain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4.5" y="4.5" width="15" height="15"/><path d="M9 12.5l2.2 2.2L15.5 9" stroke-width="1.6"/></svg>',
+    ltSpline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18q8-13 16-4"/><circle cx="12" cy="11.2" r="1.8" fill="currentColor" stroke="none"/></svg>',
+    ltSharp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18L12 7l8 9"/><circle cx="12" cy="7" r="1.8" fill="currentColor" stroke="none"/></svg>'
+  };
+
+  const TOOLS = [
+    { id: "selection", key: "v", label: "Выбор (V)", icon: "selection" },
+    { id: "hand", key: "h", label: "Панорама (H)", icon: "hand" },
+    { id: "rectangle", key: "r", label: "Прямоугольник (R)", icon: "rectangle" },
+    { id: "diamond", key: "d", label: "Ромб (D)", icon: "diamond" },
+    { id: "ellipse", key: "o", label: "Эллипс (O)", icon: "ellipse" },
+    { id: "arrow", key: "a", label: "Стрелка (A)", icon: "arrow" },
+    { id: "line", key: "l", label: "Линия (L)", icon: "line" },
+    { id: "freedraw", key: "p", label: "Рисование (P)", icon: "freedraw" },
+    { id: "text", key: "t", label: "Текст (T)", icon: "text" },
+    { id: "eraser", key: "e", label: "Ластик (E)", icon: "eraser" }
+  ];
+
+  /* ============================ Состояние ============================ */
+  const view = { zoom: 1, x: 0, y: 0 };
+  const state = {
+    elements: [],
+    selectedElementIds: [],
+    tool: "selection",
+    style: {
+      strokeColor: "#1e1e1e",
+      backgroundColor: "transparent",
+      fillStyle: "hachure",
+      strokeWidth: 2,
+      strokeStyle: "solid",
+      roughness: 1,
+      roundness: 2,
+      lineType: "spline",
+      fontSize: 20,
+      fontFamily: 1
+    },
+    pending: null,
+    suggestedBinding: null,
+    background: "dots",   // dots | lines | none
+    snapToGrid: false,    // перемещение строго по сетке
+    shapeDrawMode: "corner", // corner | center — как рисовать прямоугольник/ромб/эллипс
+    mouseWorld: { x: 0, y: 0 },
+    mouseScreen: { x: 0, y: 0 }
+  };
+  const GRID = 20; // шаг сетки (и для фона, и для привязки)
+
+  let history = [], historyIndex = -1;
+  let internalClipboard = [];
+  let editingText = null;
+  let pasteEventFired = false, pasteFallbackTimer = null;
+
+  let mode = "idle"; // idle|drawing|moving|resizing|endpoint|panning|erasing|marquee
+  let spaceDown = false;
+  let panStart = null;
+  let moveStart = null, moveSnapshot = null, moveMoved = false, dupDrag = false;
+  let drawOrigin = null;
+  let resizeKey = null, resizeOld = null, resizeStartFont = null, resizeChanged = false;
+  let marqueeStart = null, marqueeCur = null;
+
+  let _id = 1;
+  const uid = () => "el-" + (_id++);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const byId = (id) => state.elements.find((e) => e.id === id);
+  const BINDABLE = { rectangle: 1, diamond: 1, ellipse: 1, image: 1, text: 1 };
+  const LINEAR = { arrow: 1, line: 1 };
+  const LABELABLE = { rectangle: 1, diamond: 1, ellipse: 1 };
+  const isBindable = (el) => !!(el && BINDABLE[el.type]);
+  const isLinear = (el) => !!(el && LINEAR[el.type]);
+  const isLabelable = (el) => !!(el && LABELABLE[el.type]);
+
+  /* ============================ Привязка к сетке ============================ */
+  const snapV = (v) => state.snapToGrid ? Math.round(v / GRID) * GRID : v;
+  const snapPt = (p) => state.snapToGrid ? { x: snapV(p.x), y: snapV(p.y) } : p;
+
+  /* ============================ Координаты ============================ */
+  function screenToWorld(sx, sy) { return { x: (sx - view.x) / view.zoom, y: (sy - view.y) / view.zoom }; }
+  function worldToScreen(wx, wy) { return { x: wx * view.zoom + view.x, y: wy * view.zoom + view.y }; }
+  function screenPoint(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function updateMouse(e) {
+    const sp = screenPoint(e);
+    state.mouseScreen = sp;
+    state.mouseWorld = screenToWorld(sp.x, sp.y);
+  }
+
+  /* ============================ Геометрия ============================ */
+  function distSeg(px, py, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy;
+    let t = l2 === 0 ? 0 : ((px - a.x) * dx + (py - a.y) * dy) / l2;
+    t = clamp(t, 0, 1);
+    return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
+  }
+
+  function pointBounds(points) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of points) {
+      if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, minX, minY, maxX, maxY };
+  }
+
+  // Траектория линии/стрелки: 2 точки — прямая; 3 точки — через среднюю
+  // (spline — гладкая квадратичная кривая, sharp — ломаная)
+  function linearPathPoints(el) {
+    const pts = el.points;
+    if (!pts || pts.length < 3 || el.lineType === "sharp") return pts;
+    const p0 = pts[0], m = pts[1], p2 = pts[2];
+    // контрольная точка квадратичной Безье, проходящей через m при t=0.5
+    const cx = 2 * m.x - (p0.x + p2.x) / 2;
+    const cy = 2 * m.y - (p0.y + p2.y) / 2;
+    const out = [];
+    const steps = 28;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, u = 1 - t;
+      out.push({ x: u * u * p0.x + 2 * u * t * cx + t * t * p2.x, y: u * u * p0.y + 2 * u * t * cy + t * t * p2.y });
+    }
+    return out;
+  }
+
+  function midHandleOf(el) {
+    const pts = el.points;
+    if (!pts || pts.length < 2) return null;
+    if (pts.length >= 3) return pts[1];
+    return { x: (pts[0].x + pts[pts.length - 1].x) / 2, y: (pts[0].y + pts[pts.length - 1].y) / 2 };
+  }
+
+  function getTextSize(el) {
+    const lines = String(el.text || "").split("\n");
+    ctx.save(); ctx.font = getFont(el.fontSize, el.fontFamily);
+    let w = 0; for (const ln of lines) w = Math.max(w, ctx.measureText(ln || " ").width);
+    ctx.restore();
+    return { width: w, height: lines.length * el.fontSize * 1.25 };
+  }
+
+  function wrapText(text, maxWidth, fontSize, fontFamily) {
+    ctx.save();
+    ctx.font = getFont(fontSize, fontFamily);
+    const paragraphs = String(text || "").split("\n");
+    const lines = [];
+    for (const para of paragraphs) {
+      if (!para) { lines.push(""); continue; }
+      const words = para.split(" ");
+      let line = "";
+      for (const word of words) {
+        const test = line ? line + " " + word : word;
+        if (ctx.measureText(test).width <= maxWidth) { line = test; continue; }
+        if (line) lines.push(line);
+        if (ctx.measureText(word).width <= maxWidth) { line = word; continue; }
+        let chunk = "";
+        for (const ch of word) {
+          if (chunk && ctx.measureText(chunk + ch).width > maxWidth) { lines.push(chunk); chunk = ch; }
+          else chunk += ch;
+        }
+        line = chunk;
+      }
+      lines.push(line);
+    }
+    ctx.restore();
+    return lines;
+  }
+
+  function labelBox(el) {
+    const b = elementBounds(el);
+    let px, py;
+    if (el.type === "diamond") { px = b.width * 0.22; py = b.height * 0.22; }
+    else if (el.type === "ellipse") { px = b.width * 0.14; py = b.height * 0.14; }
+    else { px = Math.max(8, b.width * 0.08); py = Math.max(8, b.height * 0.08); }
+    return { x: b.minX + px, y: b.minY + py, width: Math.max(8, b.width - px * 2), height: Math.max(8, b.height - py * 2) };
+  }
+
+  function elementBounds(el) {
+    if (el.type === "freedraw") return pointBounds(el.points);
+    if (el.type === "line" || el.type === "arrow") return pointBounds(linearPathPoints(el));
+    if (el.type === "text") { const s = getTextSize(el); return { x: el.x, y: el.y, width: s.width, height: s.height, minX: el.x, minY: el.y, maxX: el.x + s.width, maxY: el.y + s.height }; }
+    let x = el.x, y = el.y, w = el.width, h = el.height;
+    if (w < 0) { x += w; w = -w; } if (h < 0) { y += h; h = -h; }
+    return { x, y, width: w, height: h, minX: x, minY: y, maxX: x + w, maxY: y + h };
+  }
+
+  function hitTest(el, w, pad) {
+    pad = pad || 4;
+    if (el.type === "line" || el.type === "arrow" || el.type === "freedraw") {
+      const tol = Math.max(9, el.strokeWidth * 2.2);
+      const pts = el.type === "freedraw" ? el.points : linearPathPoints(el);
+      for (let i = 1; i < pts.length; i++) if (distSeg(w.x, w.y, pts[i - 1], pts[i]) <= tol) return true;
+      return false;
+    }
+    const b = elementBounds(el);
+    return w.x >= b.minX - pad && w.x <= b.maxX + pad && w.y >= b.minY - pad && w.y <= b.maxY + pad;
+  }
+
+  function topmostHit(w) {
+    for (let i = state.elements.length - 1; i >= 0; i--) if (hitTest(state.elements[i], w)) return state.elements[i];
+    return null;
+  }
+
+  /* ============================ "Черновик" рендер ============================ */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function roughParams(el) {
+    const off = el.roughness === 0 ? 0 : (el.strokeWidth * 0.9 + el.roughness * 0.7);
+    return { rough: el.roughness, offset: off };
+  }
+
+  function rPath(c, rng, pts, close, rough, offset) {
+    if (!pts.length) return;
+    if (pts.length === 1) {
+      c.beginPath();
+      c.arc(pts[0][0], pts[0][1], Math.max(0.7, offset * 0.6 + 0.7), 0, Math.PI * 2);
+      c.fillStyle = c.strokeStyle; c.fill();
+      return;
+    }
+    const passes = rough <= 0 ? 1 : 2;
+    for (let pass = 0; pass < passes; pass++) {
+      c.beginPath();
+      const j = rough > 0 ? [(rng() * 2 - 1) * offset, (rng() * 2 - 1) * offset] : [0, 0];
+      c.moveTo(pts[0][0] + j[0], pts[0][1] + j[1]);
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const mx = (a[0] + b[0]) / 2 + (rng() * 2 - 1) * offset;
+        const my = (a[1] + b[1]) / 2 + (rng() * 2 - 1) * offset;
+        const bx = b[0] + (rough > 0 ? (rng() * 2 - 1) * offset * 0.5 : 0);
+        const by = b[1] + (rough > 0 ? (rng() * 2 - 1) * offset * 0.5 : 0);
+        c.quadraticCurveTo(mx, my, bx, by);
+      }
+      if (close && pts.length > 2) {
+        const a = pts[pts.length - 1], b = pts[0];
+        const mx = (a[0] + b[0]) / 2 + (rng() * 2 - 1) * offset;
+        const my = (a[1] + b[1]) / 2 + (rng() * 2 - 1) * offset;
+        c.quadraticCurveTo(mx, my, pts[0][0] + j[0], pts[0][1] + j[1]);
+        c.closePath();
+      }
+      c.stroke();
+    }
+  }
+
+  function arcSample(pts, cx, cy, r, a0, a1) {
+    const steps = Math.max(2, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 8)));
+    for (let i = 1; i <= steps; i++) { const a = a0 + (a1 - a0) * i / steps; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  }
+  function roundedRectPoints(b, r) {
+    const x = b.x, y = b.y, w = b.width, h = b.height, pts = [];
+    pts.push([x + r, y]); arcSample(pts, x + w - r, y + r, r, -Math.PI / 2, 0);
+    pts.push([x + w, y + h - r]); arcSample(pts, x + w - r, y + h - r, r, 0, Math.PI / 2);
+    pts.push([x + r, y + h]); arcSample(pts, x + r, y + h - r, r, Math.PI / 2, Math.PI);
+    pts.push([x, y + r]); arcSample(pts, x + r, y + r, r, Math.PI, Math.PI * 1.5);
+    return pts;
+  }
+  function shapeStrokePoints(el) {
+    const b = elementBounds(el);
+    if (el.type === "rectangle") {
+      if (el.roundness === 2) return { pts: roundedRectPoints(b, Math.min(24, Math.min(b.width, b.height) * 0.28)), close: true };
+      return { pts: [[b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height]], close: true };
+    }
+    if (el.type === "diamond") return { pts: [[b.x + b.width / 2, b.y], [b.x + b.width, b.y + b.height / 2], [b.x + b.width / 2, b.y + b.height], [b.x, b.y + b.height / 2]], close: true };
+    const steps = Math.max(14, Math.ceil(Math.hypot(b.width, b.height) / 6));
+    const cx = b.x + b.width / 2, cy = b.y + b.height / 2, pts = [];
+    for (let i = 0; i < steps; i++) { const a = i / steps * Math.PI * 2; pts.push([cx + Math.cos(a) * b.width / 2, cy + Math.sin(a) * b.height / 2]); }
+    return { pts, close: true };
+  }
+
+  function setLineDash(c, el) {
+    if (el.strokeStyle === "dashed") c.setLineDash([el.strokeWidth * 4, el.strokeWidth * 3]);
+    else if (el.strokeStyle === "dotted") c.setLineDash([0.1, el.strokeWidth * 2.6]);
+    else c.setLineDash([]);
+  }
+
+  function roundRectPath(c, x, y, w, h, r) {
+    r = Math.min(r, Math.min(w, h) / 2);
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  function shapePath(c, el) {
+    const b = elementBounds(el);
+    if (el.type === "ellipse") { c.beginPath(); c.ellipse(b.x + b.width / 2, b.y + b.height / 2, b.width / 2, b.height / 2, 0, 0, Math.PI * 2); }
+    else if (el.type === "diamond") { c.beginPath(); c.moveTo(b.x + b.width / 2, b.y); c.lineTo(b.x + b.width, b.y + b.height / 2); c.lineTo(b.x + b.width / 2, b.y + b.height); c.lineTo(b.x, b.y + b.height / 2); c.closePath(); }
+    else if (el.roundness === 2) roundRectPath(c, b.x, b.y, b.width, b.height, Math.min(24, Math.min(b.width, b.height) * 0.28));
+    else { c.beginPath(); c.rect(b.x, b.y, b.width, b.height); }
+  }
+  function hachureLines(c, b, gap, angle, color) {
+    const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    const diag = Math.hypot(b.width, b.height);
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    const nx = -dy, ny = dx;
+    const count = Math.ceil(diag / gap) + 1;
+    c.beginPath();
+    for (let i = -count; i <= count; i++) {
+      const ox = cx + nx * i * gap, oy = cy + ny * i * gap;
+      c.moveTo(ox - dx * diag, oy - dy * diag);
+      c.lineTo(ox + dx * diag, oy + dy * diag);
+    }
+    c.stroke();
+  }
+  function fillShape(c, el) {
+    if (el.backgroundColor === "transparent") return;
+    const b = elementBounds(el);
+    c.save();
+    shapePath(c, el); c.clip();
+    if (el.fillStyle === "solid") { c.fillStyle = el.backgroundColor; shapePath(c, el); c.fill(); }
+    else {
+      c.strokeStyle = el.backgroundColor; c.lineWidth = 1; c.lineJoin = "round";
+      const gap = Math.max(4, el.strokeWidth * 3.4);
+      hachureLines(c, b, gap, -Math.PI / 4, el.backgroundColor);
+      if (el.fillStyle === "cross-hatch") hachureLines(c, b, gap, Math.PI / 4, el.backgroundColor);
+    }
+    c.restore();
+  }
+
+  function drawArrowHead(c, rng, tip, from, el, offset) {
+    const ang = Math.atan2(tip.y - from.y, tip.x - from.x);
+    const len = Math.max(14, el.strokeWidth * 4.5);
+    const spread = 0.42;
+    for (const s of [-1, 1]) {
+      const a = ang + Math.PI + s * spread;
+      rPath(c, rng, [[tip.x, tip.y], [tip.x + Math.cos(a) * len, tip.y + Math.sin(a) * len]], false, el.roughness, offset * 0.8);
+    }
+  }
+
+  function drawText(c, el) {
+    if (editingText && editingText.el === el) return;
+    c.fillStyle = el.strokeColor;
+    c.font = getFont(el.fontSize, el.fontFamily);
+    c.textBaseline = "top";
+    const lines = String(el.text || "").split("\n");
+    const lh = el.fontSize * 1.25;
+    for (let i = 0; i < lines.length; i++) c.fillText(lines[i], el.x, el.y + i * lh);
+  }
+
+  function drawLabel(c, el) {
+    if (!el.text || (editingText && editingText.el === el)) return;
+    const box = labelBox(el);
+    const lines = wrapText(el.text, box.width, el.fontSize, el.fontFamily);
+    const lh = el.fontSize * 1.25;
+    const totalH = lines.length * lh;
+    const startY = box.y + Math.max(0, (box.height - totalH) / 2);
+    c.save();
+    shapePath(c, el); c.clip();
+    c.fillStyle = el.strokeColor;
+    c.font = getFont(el.fontSize, el.fontFamily);
+    c.textBaseline = "top";
+    c.textAlign = "center";
+    const cx = box.x + box.width / 2;
+    for (let i = 0; i < lines.length; i++) c.fillText(lines[i], cx, startY + i * lh);
+    c.restore();
+  }
+
+  function drawElement(c, el) {
+    c.save();
+    c.lineCap = "round"; c.lineJoin = "round";
+    c.lineWidth = el.strokeWidth;
+    c.strokeStyle = el.strokeColor;
+    setLineDash(c, el);
+
+    if (el.type === "rectangle" || el.type === "diamond" || el.type === "ellipse") {
+      fillShape(c, el);
+      if (el.roundness === "plain") {
+        // Режим «Ровные» — точная геометрия, как настоящий квадрат
+        shapePath(c, el);
+        c.stroke();
+      } else {
+        const { rough, offset } = roughParams(el);
+        const rng = mulberry32(el.seed);
+        const sp = shapeStrokePoints(el);
+        rPath(c, rng, sp.pts, sp.close, rough, offset);
+      }
+      drawLabel(c, el);
+    } else if (el.type === "line" || el.type === "freedraw" || el.type === "arrow") {
+      const { rough, offset } = roughParams(el);
+      const rng = mulberry32(el.seed);
+      const pts = el.type === "freedraw" ? el.points : linearPathPoints(el);
+      // на плотной кривой уменьшаем дрожание, чтобы сплайн оставался гладким
+      const segOffset = pts.length > 8 ? offset * 0.45 : offset;
+      rPath(c, rng, pts.map((p) => [p.x, p.y]), false, rough, segOffset);
+      if (el.type === "arrow" && pts.length >= 2) {
+        const n = pts.length;
+        drawArrowHead(c, rng, pts[n - 1], pts[n - 2], el, offset);
+      }
+    } else if (el.type === "text") {
+      drawText(c, el);
+    } else if (el.type === "image") {
+      if (el.image && el.image.complete) c.drawImage(el.image, el.x, el.y, el.width, el.height);
+    }
+    c.setLineDash([]);
+    c.restore();
+  }
+
+  /* ============================ Сцена ============================ */
+  function drawGrid(c) {
+    if (state.background === "none") return;
+    const spacing = GRID;
+    const tl = screenToWorld(0, 0), br = screenToWorld(window.innerWidth, window.innerHeight);
+    const cols = Math.ceil((br.x - tl.x) / spacing), rows = Math.ceil((br.y - tl.y) / spacing);
+    const x0 = Math.floor(tl.x / spacing) * spacing, y0 = Math.floor(tl.y / spacing) * spacing;
+
+    if (state.background === "lines") {
+      if (cols + rows > 1200) return;
+      c.strokeStyle = "rgba(100,116,139,0.16)";
+      c.lineWidth = 1 / view.zoom;
+      c.beginPath();
+      for (let x = x0; x <= br.x; x += spacing) { c.moveTo(x, tl.y); c.lineTo(x, br.y); }
+      for (let y = y0; y <= br.y; y += spacing) { c.moveTo(tl.x, y); c.lineTo(br.x, y); }
+      c.stroke();
+      return;
+    }
+    // dots
+    if (cols * rows > 30000) return;
+    c.fillStyle = "#cbd5e1";
+    const r = 1 / view.zoom;
+    for (let x = x0; x <= br.x; x += spacing) for (let y = y0; y <= br.y; y += spacing) {
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    }
+  }
+
+  function anchorPoint(b, key) {
+    const mx = (b.minX + b.maxX) / 2, my = (b.minY + b.maxY) / 2;
+    switch (key) {
+      case "nw": return { x: b.maxX, y: b.maxY };
+      case "ne": return { x: b.minX, y: b.maxY };
+      case "se": return { x: b.minX, y: b.minY };
+      case "sw": return { x: b.maxX, y: b.minY };
+      case "n": return { x: mx, y: b.maxY };
+      case "s": return { x: mx, y: b.minY };
+      case "e": return { x: b.minX, y: my };
+      case "w": return { x: b.maxX, y: my };
+    }
+  }
+  function handlePositions(b) {
+    const mx = (b.minX + b.maxX) / 2, my = (b.minY + b.maxY) / 2;
+    return { nw: [b.minX, b.minY], n: [mx, b.minY], ne: [b.maxX, b.minY], e: [b.maxX, my], se: [b.maxX, b.maxY], s: [mx, b.maxY], sw: [b.minX, b.maxY], w: [b.minX, my] };
+  }
+  function handleHit(sp, b) {
+    const hp = handlePositions(b);
+    for (const k in hp) {
+      const s = worldToScreen(hp[k][0], hp[k][1]);
+      if (Math.abs(sp.x - s.x) <= 6 && Math.abs(sp.y - s.y) <= 6) return k;
+    }
+    return null;
+  }
+  function drawHandles(c, b) {
+    const hp = handlePositions(b);
+    c.fillStyle = "#fff"; c.strokeStyle = SEL_COLOR; c.lineWidth = 1;
+    for (const k in hp) {
+      const s = worldToScreen(hp[k][0], hp[k][1]);
+      c.beginPath(); c.rect(s.x - 4, s.y - 4, 8, 8); c.fill(); c.stroke();
+    }
+  }
+
+  function endpointHit(sp, el) {
+    if (!isLinear(el) || !el.points || el.points.length < 2) return null;
+    const start = worldToScreen(el.points[0].x, el.points[0].y);
+    const end = worldToScreen(el.points[el.points.length - 1].x, el.points[el.points.length - 1].y);
+    if (Math.hypot(sp.x - start.x, sp.y - start.y) <= 10) return "start";
+    if (Math.hypot(sp.x - end.x, sp.y - end.y) <= 10) return "end";
+    const m = midHandleOf(el);
+    if (m) {
+      const ms = worldToScreen(m.x, m.y);
+      if (Math.hypot(sp.x - ms.x, sp.y - ms.y) <= 9) return "mid";
+    }
+    return null;
+  }
+  function drawEndpointHandles(c, el) {
+    if (!el.points || el.points.length < 2) return;
+    c.setLineDash([]);
+    // средняя точка — залитая, меньше: тяни её, чтобы изогнуть линию
+    const m = midHandleOf(el);
+    if (m) {
+      const ms = worldToScreen(m.x, m.y);
+      c.fillStyle = SEL_COLOR; c.strokeStyle = "#fff"; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(ms.x, ms.y, 5, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    // концы — белые круги
+    const pts = [el.points[0], el.points[el.points.length - 1]];
+    c.fillStyle = "#fff"; c.strokeStyle = SEL_COLOR; c.lineWidth = 1.6;
+    for (const p of pts) {
+      const s = worldToScreen(p.x, p.y);
+      c.beginPath(); c.arc(s.x, s.y, 6, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+  }
+
+  function drawSelection(c) {
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.lineWidth = 1; c.setLineDash([4, 3]);
+    c.strokeStyle = SEL_COLOR; c.fillStyle = "rgba(105,101,219,0.07)";
+    const single = state.selectedElementIds.length === 1;
+    for (const id of state.selectedElementIds) {
+      const el = byId(id); if (!el) continue;
+      if (single && isLinear(el)) continue; // линия/стрелка — без бокса, только две точки
+      const b = elementBounds(el);
+      const p = worldToScreen(b.x, b.y);
+      c.fillRect(p.x, p.y, b.width * view.zoom, b.height * view.zoom);
+      c.strokeRect(p.x, p.y, b.width * view.zoom, b.height * view.zoom);
+    }
+    c.setLineDash([]);
+    if (single) {
+      const el = byId(state.selectedElementIds[0]);
+      if (!el) return;
+      if (isLinear(el)) drawEndpointHandles(c, el);
+      else drawHandles(c, elementBounds(el));
+    }
+  }
+  function drawMarquee(c) {
+    if (mode !== "marquee" || !marqueeStart) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const x = Math.min(marqueeStart.x, marqueeCur.x), y = Math.min(marqueeStart.y, marqueeCur.y);
+    const w = Math.abs(marqueeCur.x - marqueeStart.x), h = Math.abs(marqueeCur.y - marqueeStart.y);
+    c.fillStyle = "rgba(105,101,219,0.1)"; c.fillRect(x, y, w, h);
+    c.strokeStyle = SEL_COLOR; c.lineWidth = 1; c.strokeRect(x, y, w, h);
+  }
+  function drawEraser(c) {
+    if (state.tool !== "eraser") return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.strokeStyle = "#e03131"; c.lineWidth = 1.4;
+    c.beginPath(); c.arc(state.mouseScreen.x, state.mouseScreen.y, 9, 0, Math.PI * 2); c.stroke();
+  }
+
+  function drawBindHighlight(c) {
+    if (!state.suggestedBinding) return;
+    const el = byId(state.suggestedBinding); if (!el) return;
+    const b = elementBounds(el);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const p = worldToScreen(b.minX, b.minY);
+    const pad = 5;
+    c.strokeStyle = "rgba(105,101,219,0.9)";
+    c.lineWidth = 2.5; c.setLineDash([]);
+    c.strokeRect(p.x - pad, p.y - pad, b.width * view.zoom + pad * 2, b.height * view.zoom + pad * 2);
+  }
+
+  // Плашка с размерами/смещением рядом с курсором во время рисования и правки
+  function drawBadge(c) {
+    let text = null;
+    if (mode === "drawing" && state.pending) {
+      const el = state.pending;
+      if (el.type === "rectangle" || el.type === "diamond" || el.type === "ellipse") {
+        const b = elementBounds(el);
+        text = Math.round(b.width) + " × " + Math.round(b.height);
+        if (el.type === "ellipse") text += "   r " + Math.round(b.width / 2) + "·" + Math.round(b.height / 2);
+      } else if (el.type === "line" || el.type === "arrow") {
+        const p0 = el.points[0], p1 = el.points[el.points.length - 1];
+        const ang = Math.round(Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180 / Math.PI);
+        text = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y)) + " px · " + ang + "°";
+      }
+    } else if (mode === "moving" && (moveMoved || dupDrag)) {
+      const dx = Math.round(state.mouseWorld.x - moveStart.x), dy = Math.round(state.mouseWorld.y - moveStart.y);
+      text = (dupDrag ? "копия   " : "") + "Δ " + dx + ", " + dy;
+    } else if ((mode === "resizing" || mode === "endpoint") && state.selectedElementIds.length === 1) {
+      const el = byId(state.selectedElementIds[0]);
+      if (el) {
+        const b = elementBounds(el);
+        text = Math.round(b.width) + " × " + Math.round(b.height);
+      }
+    }
+    if (!text) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.font = '600 11px ui-monospace, Menlo, Consolas, monospace';
+    c.textBaseline = "middle"; c.textAlign = "left";
+    const bw = c.measureText(text).width + 16, bh = 22;
+    const bx = Math.min(state.mouseScreen.x + 16, window.innerWidth - bw - 6);
+    const by = Math.min(state.mouseScreen.y + 18, window.innerHeight - bh - 6);
+    c.beginPath();
+    if (c.roundRect) c.roundRect(bx, by, bw, bh, 7);
+    else c.rect(bx, by, bw, bh);
+    c.fillStyle = "rgba(15,23,42,0.92)"; c.fill();
+    c.strokeStyle = "rgba(99,102,241,0.55)"; c.lineWidth = 1; c.stroke();
+    c.fillStyle = "#e2e8f0";
+    c.fillText(text, bx + 8, by + bh / 2 + 0.5);
+  }
+
+  function render() {
+    const c = ctx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.fillStyle = "#ffffff";
+    c.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    c.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.x, dpr * view.y);
+    drawGrid(c);
+    for (const el of state.elements) drawElement(c, el);
+    if (state.pending) drawElement(c, state.pending);
+    drawBindHighlight(c);
+    drawSelection(c); drawMarquee(c); drawEraser(c); drawBadge(c);
+    updateZoomLabel();
+    if (groups.gFS) updateContextPanel();
+  }
+
+  function updateZoomLabel() { zoomLabel.textContent = Math.round(view.zoom * 100) + "%"; }
+
+  /* ============================ История ============================ */
+  function snapshot() {
+    return state.elements.map((el) => {
+      const c = Object.assign({}, el);
+      if (el.points) c.points = el.points.map((p) => ({ x: p.x, y: p.y }));
+      return c;
+    });
+  }
+  function restore(snap) {
+    return snap.map((el) => {
+      const c = Object.assign({}, el);
+      if (el.points) c.points = el.points.map((p) => ({ x: p.x, y: p.y }));
+      return c;
+    });
+  }
+  function pushHistory() {
+    history = history.slice(0, historyIndex + 1);
+    history.push(snapshot());
+    if (history.length > 300) history.shift();
+    historyIndex = history.length - 1;
+    updateHistoryButtons();
+  }
+  function undo() {
+    if (historyIndex > 0) {
+      historyIndex--; state.elements = restore(history[historyIndex]);
+      state.selectedElementIds = state.selectedElementIds.filter((id) => byId(id));
+      cleanBindings(); updateHistoryButtons(); render();
+    }
+  }
+  function redo() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++; state.elements = restore(history[historyIndex]);
+      state.selectedElementIds = state.selectedElementIds.filter((id) => byId(id));
+      cleanBindings(); updateHistoryButtons(); render();
+    }
+  }
+  function updateHistoryButtons() {
+    const u = document.getElementById("btnUndo"), r = document.getElementById("btnRedo");
+    if (u) u.disabled = historyIndex <= 0;
+    if (r) r.disabled = historyIndex >= history.length - 1;
+  }
+
+  /* ============================ Элементы ============================ */
+  function newElement(type, x, y) {
+    const s = state.style;
+    return {
+      id: uid(), type: type, seed: (Math.random() * 2147483647) | 0,
+      x: x, y: y, width: 0, height: 0, angle: 0,
+      strokeColor: s.strokeColor, backgroundColor: s.backgroundColor, fillStyle: s.fillStyle,
+      strokeWidth: s.strokeWidth, strokeStyle: s.strokeStyle, roughness: s.roughness,
+      roundness: s.roundness, lineType: s.lineType, fontSize: s.fontSize, fontFamily: s.fontFamily,
+      points: [], text: "", image: null,
+      startBinding: null, endBinding: null   // id фигуры, к которой привязан конец
+    };
+  }
+
+  /* ============================ Привязка стрелок/линий ============================ */
+  const BIND_DIST = 14; // насколько близко к фигуре нужно подвести конец
+
+  function centerOf(el) { const b = elementBounds(el); return { x: b.minX + b.width / 2, y: b.minY + b.height / 2 }; }
+
+  // Точка на границе фигуры в направлении (dx,dy) от её центра + зазор
+  function edgePoint(shape, dx, dy, gap) {
+    const b = elementBounds(shape);
+    const cx = b.minX + b.width / 2, cy = b.minY + b.height / 2;
+    const hw = Math.max(b.width / 2, 0.5), hh = Math.max(b.height / 2, 0.5);
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len; dy /= len;
+    let t;
+    if (shape.type === "ellipse") {
+      t = 1 / Math.hypot(dx / hw, dy / hh);
+    } else if (shape.type === "diamond") {
+      t = 1 / (Math.abs(dx) / hw + Math.abs(dy) / hh);
+    } else { // rectangle, image, text
+      const tx = Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : Infinity;
+      const ty = Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : Infinity;
+      t = Math.min(tx, ty);
+    }
+    t += (gap || 0);
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  // Фигура под точкой (для подсветки и создания привязки)
+  function bindableAt(w, excludeId) {
+    for (let i = state.elements.length - 1; i >= 0; i--) {
+      const el = state.elements[i];
+      if (!isBindable(el) || el.id === excludeId) continue;
+      const b = elementBounds(el);
+      if (w.x >= b.minX - BIND_DIST && w.x <= b.maxX + BIND_DIST &&
+          w.y >= b.minY - BIND_DIST && w.y <= b.maxY + BIND_DIST) return el;
+    }
+    return null;
+  }
+
+  // Пересчёт концов привязанной стрелки/линии: концы «липнут» к краям фигур.
+  // Если есть средняя точка — конец направлен на неё (кривая входит в фигуру красиво).
+  function updateBinding(el) {
+    if (!isLinear(el) || !el.points || el.points.length < 2) return;
+    const n = el.points.length;
+    const startShape = el.startBinding ? byId(el.startBinding) : null;
+    const endShape = el.endBinding ? byId(el.endBinding) : null;
+    if (!startShape && !endShape) return;
+    const gap = 4 + el.strokeWidth;
+    const hasMid = n > 2;
+
+    if (startShape) {
+      const c = centerOf(startShape);
+      // ориентир: средняя точка → иначе центр фигуры на другом конце → иначе сам конец
+      const ref = hasMid ? el.points[1] : (endShape ? centerOf(endShape) : el.points[n - 1]);
+      let dx = ref.x - c.x, dy = ref.y - c.y;
+      if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) dy = 1;
+      el.points[0] = edgePoint(startShape, dx, dy, gap);
+    }
+    if (endShape) {
+      const c = centerOf(endShape);
+      const ref = hasMid ? el.points[n - 2] : (startShape ? centerOf(startShape) : el.points[0]);
+      let dx = ref.x - c.x, dy = ref.y - c.y;
+      if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) dy = 1;
+      el.points[n - 1] = edgePoint(endShape, dx, dy, gap);
+    }
+    const bb = pointBounds(el.points);
+    el.x = bb.x; el.y = bb.y; el.width = bb.width; el.height = bb.height;
+  }
+
+  function updateAllBindings() { for (const el of state.elements) if (isLinear(el)) updateBinding(el); }
+
+  // Убираем привязки на удалённые фигуры
+  function cleanBindings() {
+    for (const el of state.elements) {
+      if (!isLinear(el)) continue;
+      if (el.startBinding && !byId(el.startBinding)) el.startBinding = null;
+      if (el.endBinding && !byId(el.endBinding)) el.endBinding = null;
+    }
+  }
+
+  // Если тащим саму стрелку, а фигура не выделена — отвязываем
+  function unbindDraggedArrows(selectedIds) {
+    for (const id of selectedIds) {
+      const el = byId(id);
+      if (!el || !isLinear(el)) continue;
+      if (el.startBinding && selectedIds.indexOf(el.startBinding) === -1) el.startBinding = null;
+      if (el.endBinding && selectedIds.indexOf(el.endBinding) === -1) el.endBinding = null;
+    }
+  }
+
+  function isSelected(id) { return state.selectedElementIds.indexOf(id) !== -1; }
+  function clearSelection() { state.selectedElementIds = []; }
+  function selectOnly(id) { state.selectedElementIds = [id]; }
+  function toggleSelect(id) {
+    const i = state.selectedElementIds.indexOf(id);
+    if (i === -1) state.selectedElementIds.push(id); else state.selectedElementIds.splice(i, 1);
+  }
+  function selectAll() { state.selectedElementIds = state.elements.map((e) => e.id); render(); }
+
+  function snapshotPos(el) {
+    if (el.points && el.points.length) return { points: el.points.map((p) => ({ x: p.x, y: p.y })) };
+    return { x: el.x, y: el.y };
+  }
+  function moveElement(el, dx, dy) {
+    if (el.type === "line" || el.type === "arrow" || el.type === "freedraw") {
+      for (const p of el.points) { p.x += dx; p.y += dy; }
+    } else { el.x += dx; el.y += dy; }
+  }
+
+  function deleteSelected() {
+    if (!state.selectedElementIds.length) return;
+    state.elements = state.elements.filter((e) => !isSelected(e.id));
+    clearSelection(); cleanBindings(); pushHistory(); render();
+  }
+
+  function cloneElements(list, dx, dy) {
+    const map = {};
+    const out = list.map((el) => {
+      const c = Object.assign({}, el);
+      c.id = uid(); c.seed = (Math.random() * 2147483647) | 0;
+      map[el.id] = c.id;
+      if (el.points) c.points = el.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+      c.x = el.x + dx; c.y = el.y + dy;
+      return c;
+    });
+    // переносим привязки внутрь копии (на внешние фигуры — сбрасываем)
+    for (const c of out) {
+      if (!isLinear(c)) continue;
+      c.startBinding = c.startBinding ? (map[c.startBinding] || null) : null;
+      c.endBinding = c.endBinding ? (map[c.endBinding] || null) : null;
+    }
+    return out;
+  }
+  function copySelected() {
+    internalClipboard = cloneElements(state.selectedElementIds.map(byId).filter(Boolean), 0, 0);
+    if (internalClipboard.length) toast("Скопировано (" + internalClipboard.length + ")");
+  }
+  function pasteClipboard(atMouse) {
+    if (!internalClipboard.length) return;
+    let dx = 20, dy = 20;
+    if (atMouse) {
+      // вставляем так, чтобы центр скопированного оказался под курсором
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const el of internalClipboard) {
+        const b = elementBounds(el);
+        minX = Math.min(minX, b.minX); minY = Math.min(minY, b.minY);
+        maxX = Math.max(maxX, b.maxX); maxY = Math.max(maxY, b.maxY);
+      }
+      const target = snapPt(state.mouseWorld);
+      dx = target.x - (minX + maxX) / 2;
+      dy = target.y - (minY + maxY) / 2;
+      if (state.snapToGrid) {
+        dx = Math.round((minX + dx) / GRID) * GRID - minX;
+        dy = Math.round((minY + dy) / GRID) * GRID - minY;
+      }
+    }
+    const clones = cloneElements(internalClipboard, dx, dy);
+    state.elements.push.apply(state.elements, clones);
+    state.selectedElementIds = clones.map((e) => e.id);
+    pushHistory(); render();
+  }
+  function duplicate() {
+    if (!state.selectedElementIds.length) return;
+    copySelected(); pasteClipboard(false);
+  }
+  function bringToFront() {
+    const sel = state.elements.filter((e) => isSelected(e.id));
+    if (!sel.length) return;
+    state.elements = state.elements.filter((e) => !isSelected(e.id)).concat(sel);
+    pushHistory(); render();
+  }
+  function sendToBack() {
+    const sel = state.elements.filter((e) => isSelected(e.id));
+    if (!sel.length) return;
+    state.elements = sel.concat(state.elements.filter((e) => !isSelected(e.id)));
+    pushHistory(); render();
+  }
+
+  /* ============================ Ластик ============================ */
+  function eraseAt(w) {
+    let changed = false;
+    for (let i = state.elements.length - 1; i >= 0; i--) {
+      if (hitTest(state.elements[i], w, 6)) {
+        const removed = state.elements.splice(i, 1)[0];
+        const si = state.selectedElementIds.indexOf(removed.id);
+        if (si !== -1) state.selectedElementIds.splice(si, 1);
+        cleanBindings();
+        pushHistory(); // каждое удаление — отдельная запись истории
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /* ============================ Рисование/взаимодействие ============================ */
+  function startDrawing(w, e) {
+    mode = "drawing";
+    if (state.tool !== "freedraw") w = snapPt(w);
+    drawOrigin = { x: w.x, y: w.y };
+    const el = newElement(state.tool, w.x, w.y);
+    if (state.tool === "line" || state.tool === "arrow") {
+      el.points = [{ x: w.x, y: w.y }, { x: w.x, y: w.y }];
+      const s = bindableAt(w, null);          // старт на фигуре → привязываем
+      if (s) el.startBinding = s.id;
+    }
+    else if (state.tool === "freedraw") el.points = [{ x: w.x, y: w.y }];
+    state.pending = el;
+  }
+  function updatePending(w, e) {
+    const el = state.pending; if (!el) return;
+    if (el.type !== "freedraw") w = snapPt(w);
+    if (el.type === "line" || el.type === "arrow") {
+      let tx = w.x, ty = w.y;
+      if (e.shiftKey) {
+        const dx = tx - el.points[0].x, dy = ty - el.points[0].y;
+        const step = Math.PI / 12, ang = Math.atan2(dy, dx), snapped = Math.round(ang / step) * step, len = Math.hypot(dx, dy);
+        tx = el.points[0].x + Math.cos(snapped) * len; ty = el.points[0].y + Math.sin(snapped) * len;
+      }
+      el.points[1] = { x: tx, y: ty };
+      // ищем фигуру под курсором для привязки конца
+      const t = bindableAt({ x: tx, y: ty }, el.startBinding);
+      el.endBinding = t ? t.id : null;
+      state.suggestedBinding = t ? t.id : (el.startBinding || null);
+      updateBinding(el);
+    } else if (el.type === "freedraw") el.points.push({ x: w.x, y: w.y });
+    else {
+      // прямоугольник / ромб / эллипс
+      let dx = w.x - drawOrigin.x, dy = w.y - drawOrigin.y;
+      if (e.shiftKey) {
+        // Shift — равные стороны: ровный круг, квадрат, ромб
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        dx = (dx < 0 ? -1 : 1) * m;
+        dy = (dy < 0 ? -1 : 1) * m;
+      }
+      if (state.shapeDrawMode === "center") {
+        // точка нажатия — центр фигуры, тянем радиус
+        const hx = Math.abs(dx), hy = Math.abs(dy);
+        el.x = drawOrigin.x - hx; el.y = drawOrigin.y - hy;
+        el.width = hx * 2; el.height = hy * 2;
+      } else {
+        el.x = drawOrigin.x; el.y = drawOrigin.y;
+        el.width = dx; el.height = dy;
+      }
+    }
+  }
+  function finalizePending() {
+    const el = state.pending; if (!el) { mode = "idle"; return; }
+    state.suggestedBinding = null;
+    if (el.type === "line" || el.type === "arrow" || el.type === "freedraw") {
+      if (el.points.length < 2) el.points.push({ x: el.points[0].x + 0.01, y: el.points[0].y });
+      if (isLinear(el)) {
+        // стрелка нулевой длины — не создаём
+        const d = Math.hypot(el.points[1].x - el.points[0].x, el.points[1].y - el.points[0].y);
+        if (d < 2) { state.pending = null; mode = "idle"; return; }
+        if (el.startBinding && el.startBinding === el.endBinding) el.endBinding = null;
+        updateBinding(el);
+      }
+      const b = pointBounds(el.points); el.x = b.x; el.y = b.y; el.width = b.width; el.height = b.height;
+    } else {
+      if (Math.abs(el.width) < 1 && Math.abs(el.height) < 1) { state.pending = null; mode = "idle"; return; }
+      if (el.width < 0) { el.x += el.width; el.width = -el.width; }
+      if (el.height < 0) { el.y += el.height; el.height = -el.height; }
+    }
+    state.elements.push(el);
+    state.pending = null;
+    selectOnly(el.id);
+    pushHistory();
+  }
+
+  function handleSelectionDown(sp, w, e) {
+    if (state.selectedElementIds.length === 1) {
+      const el = byId(state.selectedElementIds[0]);
+      if (el && isLinear(el)) {
+        const ep = endpointHit(sp, el);
+        if (ep) { mode = "endpoint"; resizeKey = ep; resizeChanged = false; return; }
+      } else if (el) {
+        const h = handleHit(sp, elementBounds(el));
+        if (h) { mode = "resizing"; resizeKey = h; resizeOld = elementBounds(el); resizeStartFont = el.type === "text" ? el.fontSize : null; resizeChanged = false; return; }
+      }
+    }
+    const hit = topmostHit(w);
+    if (hit) {
+      if (e.shiftKey) toggleSelect(hit.id);
+      else if (!isSelected(hit.id)) selectOnly(hit.id);
+
+      dupDrag = false;
+      // Ctrl/Cmd + перетаскивание — создаём копию и тащим уже её
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const src = state.selectedElementIds.map(byId).filter(Boolean);
+        const clones = cloneElements(src, 0, 0);
+        state.elements.push.apply(state.elements, clones);
+        state.selectedElementIds = clones.map((c) => c.id);
+        dupDrag = true;
+      }
+
+      mode = "moving";
+      moveStart = w; moveMoved = false;
+      unbindDraggedArrows(state.selectedElementIds); // тащим стрелку отдельно → отвязка
+      moveSnapshot = state.selectedElementIds.map((id) => ({ el: byId(id), start: snapshotPos(byId(id)) }));
+    } else {
+      if (!e.shiftKey) clearSelection();
+      mode = "marquee"; marqueeStart = sp; marqueeCur = sp;
+    }
+  }
+
+  function computeNewBounds(key, oldB, w) {
+    const a = anchorPoint(oldB, key);
+    let minX, minY, maxX, maxY;
+    if (key === "nw" || key === "ne" || key === "se" || key === "sw") {
+      minX = Math.min(a.x, w.x); maxX = Math.max(a.x, w.x);
+      minY = Math.min(a.y, w.y); maxY = Math.max(a.y, w.y);
+    } else if (key === "n" || key === "s") {
+      minX = oldB.minX; maxX = oldB.maxX;
+      minY = Math.min(a.y, w.y); maxY = Math.max(a.y, w.y);
+    } else {
+      minY = oldB.minY; maxY = oldB.maxY;
+      minX = Math.min(a.x, w.x); maxX = Math.max(a.x, w.x);
+    }
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, width: maxX - minX, height: maxY - minY };
+  }
+  function applyResize(el, oldB, newB) {
+    const sx = oldB.width ? newB.width / oldB.width : 1;
+    const sy = oldB.height ? newB.height / oldB.height : 1;
+    if (el.type === "line" || el.type === "arrow" || el.type === "freedraw") {
+      for (const p of el.points) { p.x = newB.minX + (p.x - oldB.minX) * sx; p.y = newB.minY + (p.y - oldB.minY) * sy; }
+      const b = pointBounds(el.points); el.x = b.x; el.y = b.y; el.width = b.width; el.height = b.height;
+    } else if (el.type === "text") {
+      el.x = newB.minX; el.y = newB.minY;
+      el.fontSize = Math.max(8, Math.round((resizeStartFont || el.fontSize) * sy));
+    } else { el.x = newB.minX; el.y = newB.minY; el.width = newB.width; el.height = newB.height; }
+  }
+  function doResize(w) {
+    const el = byId(state.selectedElementIds[0]); if (!el) return;
+    w = snapPt(w);
+    const nb = computeNewBounds(resizeKey, resizeOld, w);
+    applyResize(el, resizeOld, nb);
+    resizeChanged = true;
+  }
+
+  // Перетаскивание начала/конца/середины линии или стрелки (с повторной привязкой к фигурам)
+  function doEndpoint(w, e) {
+    const el = byId(state.selectedElementIds[0]);
+    if (!el || !isLinear(el) || !el.points || el.points.length < 2) return;
+    if (resizeKey === "mid") {
+      const sw = snapPt(w);
+      // первая протяжка превращает 2 точки в 3 — линия пойдёт через среднюю
+      if (el.points.length === 2) el.points.splice(1, 0, { x: sw.x, y: sw.y });
+      else el.points[1] = { x: sw.x, y: sw.y };
+      updateBinding(el);
+      const bb = pointBounds(el.points);
+      el.x = bb.x; el.y = bb.y; el.width = bb.width; el.height = bb.height;
+      resizeChanged = true;
+      return;
+    }
+    const n = el.points.length;
+    const idx = resizeKey === "start" ? 0 : n - 1;
+    const other = resizeKey === "start" ? el.points[n - 1] : el.points[0];
+    let tx = snapV(w.x), ty = snapV(w.y);
+    if (e && e.shiftKey) {
+      const dx = tx - other.x, dy = ty - other.y;
+      const step = Math.PI / 12, ang = Math.atan2(dy, dx), snapped = Math.round(ang / step) * step, len = Math.hypot(dx, dy);
+      tx = other.x + Math.cos(snapped) * len;
+      ty = other.y + Math.sin(snapped) * len;
+    }
+    el.points[idx] = { x: tx, y: ty };
+    const target = bindableAt({ x: tx, y: ty }, null);
+    if (resizeKey === "start") el.startBinding = target ? target.id : null;
+    else el.endBinding = target ? target.id : null;
+    state.suggestedBinding = target ? target.id : null;
+    updateBinding(el);
+    const b = pointBounds(el.points);
+    el.x = b.x; el.y = b.y; el.width = b.width; el.height = b.height;
+    resizeChanged = true;
+  }
+
+  function finalizeMarquee() {
+    const a = screenToWorld(Math.min(marqueeStart.x, marqueeCur.x), Math.min(marqueeStart.y, marqueeCur.y));
+    const b = screenToWorld(Math.max(marqueeStart.x, marqueeCur.x), Math.max(marqueeStart.y, marqueeCur.y));
+    const rect = { minX: a.x, minY: a.y, maxX: b.x, maxY: b.y };
+    const ids = [];
+    for (const el of state.elements) {
+      const bb = elementBounds(el);
+      if (bb.maxX >= rect.minX && bb.minX <= rect.maxX && bb.maxY >= rect.minY && bb.minY <= rect.maxY) ids.push(el.id);
+    }
+    state.selectedElementIds = ids;
+    marqueeStart = marqueeCur = null;
+  }
+
+  /* ============================ События мыши ============================ */
+  function onPointerDown(e) {
+    if (e.button === 2) return;
+    // Гасим default только для текста: иначе браузер уводит фокус с textarea.
+    // (Полный preventDefault ломал бы dblclick для редактирования текста.)
+    if (state.tool === "text" || editingText) e.preventDefault();
+    updateMouse(e);
+    const sp = screenPoint(e), w = screenToWorld(sp.x, sp.y);
+
+    // Если сейчас редактируется текст — первый клик просто фиксирует его
+    if (editingText) { editingText.commit(true); return; }
+
+    if (e.button === 1 || spaceDown || state.tool === "hand") {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      mode = "panning"; panStart = { sx: sp.x, sy: sp.y, vx: view.x, vy: view.y };
+      canvas.style.cursor = "grabbing"; return;
+    }
+    if (e.button !== 0) return;
+
+    // Текст открываем БЕЗ pointer capture, иначе textarea мгновенно теряет фокус
+    if (state.tool === "text") {
+      const hit = topmostHit(w);
+      if (hit && isLabelable(hit)) openTextEditor(hit);
+      else openTextEditor(null, w.x, w.y);
+      return;
+    }
+
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    if (state.tool === "eraser") { mode = "erasing"; eraseAt(w); render(); return; }
+    if (state.tool === "selection") { handleSelectionDown(sp, w, e); render(); return; }
+    startDrawing(w, e); render();
+  }
+
+  function onPointerMove(e) {
+    updateMouse(e);
+    const sp = screenPoint(e), w = screenToWorld(sp.x, sp.y);
+    if (mode === "panning") { view.x = panStart.vx + (sp.x - panStart.sx); view.y = panStart.vy + (sp.y - panStart.sy); }
+    else if (mode === "erasing") { eraseAt(w); }
+    else if (mode === "moving") {
+      let dx = w.x - moveStart.x, dy = w.y - moveStart.y;
+      // Привязка к сетке: выравниваем «якорь» первого элемента по узлам сетки
+      if (state.snapToGrid && moveSnapshot && moveSnapshot.length) {
+        const s0 = moveSnapshot[0];
+        const bx = s0.start.points ? s0.start.points[0].x : s0.start.x;
+        const by = s0.start.points ? s0.start.points[0].y : s0.start.y;
+        dx = Math.round((bx + dx) / GRID) * GRID - bx;
+        dy = Math.round((by + dy) / GRID) * GRID - by;
+      }
+      if (dx !== 0 || dy !== 0) {
+        for (const s of moveSnapshot) {
+          if (s.start.points) for (let i = 0; i < s.el.points.length; i++) { s.el.points[i].x = s.start.points[i].x + dx; s.el.points[i].y = s.start.points[i].y + dy; }
+          else { s.el.x = s.start.x + dx; s.el.y = s.start.y + dy; }
+        }
+        moveMoved = true;
+        updateAllBindings(); // привязанные стрелки тянутся за фигурами
+      }
+    }
+    else if (mode === "resizing") { doResize(w); updateAllBindings(); }
+    else if (mode === "endpoint") { doEndpoint(w, e); }
+    else if (mode === "drawing") updatePending(w, e);
+    else if (mode === "marquee") marqueeCur = sp;
+    // Подсветка фигуры под курсором при наведении инструментом стрелки/линии
+    let hoverChanged = false;
+    if (mode === "idle") {
+      const next = (state.tool === "arrow" || state.tool === "line")
+        ? (bindableAt(w, null) || {}).id || null : null;
+      if (next !== state.suggestedBinding) { state.suggestedBinding = next; hoverChanged = true; }
+      if (state.tool === "selection" && !spaceDown) {
+        if (e.ctrlKey || e.metaKey) canvas.style.cursor = "copy"; // Ctrl + тянуть = копия
+        else if (state.selectedElementIds.length === 1) {
+          const sel = byId(state.selectedElementIds[0]);
+          if (sel && isLinear(sel) && endpointHit(sp, sel)) canvas.style.cursor = "pointer";
+          else updateCursor();
+        } else updateCursor();
+      }
+    }
+    // Перерисовываем только когда это нужно (для курсора-ластика — всегда)
+    if (mode !== "idle" || state.tool === "eraser" || hoverChanged) render();
+  }
+
+  function onPointerUp() {
+    if (mode === "panning") { mode = "idle"; updateCursor(); return; }
+    if (mode === "erasing") { mode = "idle"; render(); return; }
+    if (mode === "moving") {
+      if (dupDrag) {
+        // копия уже в элементах — фиксируем в истории и кладём в буфер для Ctrl+V
+        const clones = state.selectedElementIds.map(byId).filter(Boolean);
+        internalClipboard = cloneElements(clones, 0, 0);
+        pushHistory();
+        if (moveMoved) toast("Копия создана");
+      } else if (moveMoved) pushHistory();
+      dupDrag = false; mode = "idle"; render(); return;
+    }
+    if (mode === "resizing") { if (resizeChanged) pushHistory(); mode = "idle"; render(); return; }
+    if (mode === "endpoint") { state.suggestedBinding = null; if (resizeChanged) pushHistory(); mode = "idle"; render(); return; }
+    if (mode === "marquee") { finalizeMarquee(); mode = "idle"; render(); return; }
+    if (mode === "drawing") { finalizePending(); mode = "idle"; render(); return; }
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  canvas.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    const sp = screenPoint(e);
+    if (e.ctrlKey || e.metaKey) {
+      const before = screenToWorld(sp.x, sp.y);
+      view.zoom = clamp(view.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 0.1, 8);
+      view.x = sp.x - before.x * view.zoom;
+      view.y = sp.y - before.y * view.zoom;
+    } else { view.x -= e.deltaX; view.y -= e.deltaY; }
+    render();
+  }, { passive: false });
+
+  canvas.addEventListener("dblclick", function (e) {
+    if (state.tool !== "selection" && state.tool !== "text") return;
+    const sp = screenPoint(e), w = screenToWorld(sp.x, sp.y);
+    const hit = topmostHit(w);
+    if (hit && hit.type === "text") openTextEditor(hit, hit.x, hit.y);
+    else if (hit && isLabelable(hit)) openTextEditor(hit);
+  });
+
+  /* ============================ Текст ============================ */
+  function openTextEditor(el, wx, wy, extra) {
+    if (editingText) { editingText.commit(true); }
+    extra = extra || "";
+    const isShape = isLabelable(el);
+    const fontSize = el ? el.fontSize : state.style.fontSize;
+    const fam = el ? el.fontFamily : state.style.fontFamily;
+    const color = el ? el.strokeColor : state.style.strokeColor;
+
+    const ta = document.createElement("textarea");
+    ta.className = "board-text-input" + (isShape ? " centered" : "");
+    ta.value = ((el && el.text) ? el.text : "") + extra;
+    ta.style.font = getFont(fontSize * view.zoom, fam);
+    ta.style.color = color;
+    ta.style.lineHeight = "1.25";
+    ta.style.caretColor = color;
+
+    if (isShape) {
+      const box = labelBox(el);
+      const tl = worldToScreen(box.x, box.y);
+      const br = worldToScreen(box.x + box.width, box.y + box.height);
+      ta.wrap = "soft";
+      ta.style.whiteSpace = "pre-wrap";
+      ta.style.textAlign = "center";
+      ta.style.left = tl.x + "px";
+      ta.style.top = tl.y + "px";
+      ta.style.width = Math.max(40, br.x - tl.x) + "px";
+      ta.style.height = Math.max(fontSize * view.zoom * 1.4, br.y - tl.y) + "px";
+    } else {
+      const sp = worldToScreen(wx, wy);
+      ta.wrap = "off";
+      ta.style.left = sp.x + "px";
+      ta.style.top = sp.y + "px";
+    }
+    document.body.appendChild(ta);
+    if (!isShape) autoGrow();
+
+    // Фокус ставим асинхронно: иначе браузер успевает увести его обратно на canvas
+    let ready = false;
+    requestAnimationFrame(function () {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ready = true;
+    });
+
+    function autoGrow() {
+      if (isShape) return;
+      ta.style.width = "auto"; ta.style.height = "auto";
+      ta.style.width = Math.max(60, ta.scrollWidth + 8) + "px";
+      ta.style.height = (ta.scrollHeight + 2) + "px";
+    }
+
+    let done = false;
+    function commit(save) {
+      if (done) return; done = true;
+      const val = ta.value.replace(/\s+$/, "");
+      ta.remove(); editingText = null;
+      if (isShape) {
+        if (save) {
+          const old = el.text || "";
+          el.text = val;
+          if (old !== val) pushHistory();
+        }
+      } else if (save && val.trim()) {
+        if (el) { const old = el.text; el.text = val; if (old !== val) pushHistory(); }
+        else {
+          const ne = newElement("text", wx, wy);
+          ne.text = val; ne.fontSize = fontSize; ne.fontFamily = fam;
+          state.elements.push(ne); selectOnly(ne.id); pushHistory();
+          setTool("selection");
+        }
+      } else if (save && el && el.type === "text" && !val.trim()) {
+        state.elements = state.elements.filter((x) => x.id !== el.id);
+        clearSelection(); pushHistory();
+      }
+      render();
+    }
+    editingText = { el: el, ta: ta, commit: commit };
+    render(); // спрятать подпись на холсте, пока открыт редактор
+    ta.addEventListener("blur", function () { if (ready) commit(true); });
+    ta.addEventListener("input", autoGrow);
+    ta.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+    ta.addEventListener("keydown", function (ev) {
+      ev.stopPropagation();
+      if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+    });
+  }
+
+  /* ============================ Вставка картинок ============================ */
+  function insertImage(dataUrl) {
+    const img = new Image();
+    img.onload = function () {
+      const maxDim = 320;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      const sc = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.max(1, w * sc); h = Math.max(1, h * sc);
+      const el = newElement("image", state.mouseWorld.x, state.mouseWorld.y);
+      el.width = w; el.height = h; el.image = img; el.strokeColor = "transparent"; el.backgroundColor = "transparent";
+      state.elements.push(el); selectOnly(el.id); pushHistory(); render();
+    };
+    img.src = dataUrl;
+  }
+  window.addEventListener("paste", function (e) {
+    pasteEventFired = true;
+    clearTimeout(pasteFallbackTimer);
+    const items = e.clipboardData && e.clipboardData.items;
+    if (items) {
+      for (const it of items) {
+        if (it.type && it.type.indexOf("image") !== -1) {
+          const file = it.getAsFile();
+          if (file) {
+            const rd = new FileReader();
+            rd.onload = (ev) => insertImage(ev.target.result);
+            rd.readAsDataURL(file);
+            e.preventDefault(); return;
+          }
+        }
+      }
+    }
+    // Внутренний буфер (скопированные фигуры) — в приоритете
+    if (internalClipboard.length) { pasteClipboard(true); return; }
+    // Иначе внешний текст вставляем как текстовый элемент
+    const txt = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+    if (txt && txt.trim()) {
+      const p = snapPt(state.mouseWorld);
+      const ne = newElement("text", p.x, p.y);
+      ne.text = txt.trim();
+      state.elements.push(ne); selectOnly(ne.id); pushHistory(); render();
+    }
+  });
+
+  /* ============================ Клавиатура ============================ */
+  window.addEventListener("keydown", function (e) {
+    const tag = (e.target && e.target.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "input") return;
+    const meta = e.ctrlKey || e.metaKey;
+    const key = (e.key || "").toLowerCase();
+
+    if (e.code === "Space") { e.preventDefault(); spaceDown = true; updateCursor(); return; }
+    if (meta && key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if (meta && (key === "y" || (key === "z" && e.shiftKey))) { e.preventDefault(); redo(); return; }
+    if (meta && key === "a") { e.preventDefault(); selectAll(); return; }
+    if (meta && key === "c") { copySelected(); return; }
+    if (meta && key === "v") {
+      // страховка: если браузер не прислал событие paste, вставим копию сами
+      pasteEventFired = false;
+      clearTimeout(pasteFallbackTimer);
+      pasteFallbackTimer = setTimeout(function () {
+        if (!pasteEventFired && internalClipboard.length) pasteClipboard(true);
+      }, 220);
+      return;
+    }
+    if (meta && key === "d") { e.preventDefault(); duplicate(); return; }
+    if (meta && e.code === "Digit0") { e.preventDefault(); resetZoom(); return; }
+    if (e.shiftKey && e.code === "Digit1") { e.preventDefault(); zoomToFit(); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedElementIds.length) { e.preventDefault(); deleteSelected(); } return; }
+    if (e.key === "Escape") { toggleHelp(false); clearSelection(); setTool("selection"); render(); return; }
+    if (e.key === "?" || (e.shiftKey && key === "/")) { e.preventDefault(); toggleHelp(); return; }
+
+    const sel = state.selectedElementIds.length === 1 ? byId(state.selectedElementIds[0]) : null;
+    if (sel && (sel.type === "text" || isLabelable(sel))) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (sel.type === "text") openTextEditor(sel, sel.x, sel.y);
+        else openTextEditor(sel);
+        return;
+      }
+      if (!meta && e.key.length === 1 && !e.altKey) {
+        e.preventDefault();
+        if (sel.type === "text") openTextEditor(sel, sel.x, sel.y, e.key);
+        else openTextEditor(sel, 0, 0, e.key);
+        return;
+      }
+    }
+
+    if (!meta && key === "g") { setSnap(!state.snapToGrid); return; }
+
+    const map = { v: "selection", h: "hand", r: "rectangle", d: "diamond", o: "ellipse", a: "arrow", l: "line", p: "freedraw", t: "text", e: "eraser" };
+    if (!meta && map[key]) { setTool(map[key]); return; }
+    if (!meta && key === "]") { bringToFront(); return; }
+    if (!meta && key === "[") { sendToBack(); return; }
+  });
+  window.addEventListener("keyup", function (e) { if (e.code === "Space") { spaceDown = false; updateCursor(); } });
+
+  /* ============================ Зум / панорама ============================ */
+  function allBounds() {
+    if (!state.elements.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of state.elements) { const b = elementBounds(el); minX = Math.min(minX, b.minX); minY = Math.min(minY, b.minY); maxX = Math.max(maxX, b.maxX); maxY = Math.max(maxY, b.maxY); }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, minX, minY, maxX, maxY };
+  }
+  function zoomToFit() {
+    const b = allBounds(); if (!b) return;
+    const pad = 60;
+    const z = clamp(Math.min((window.innerWidth - pad * 2) / (b.width || 1), (window.innerHeight - pad * 2) / (b.height || 1)), 0.1, 4);
+    view.zoom = z;
+    view.x = (window.innerWidth - b.width * z) / 2 - b.x * z;
+    view.y = (window.innerHeight - b.height * z) / 2 - b.y * z;
+    render();
+  }
+  function resetZoom() {
+    const b = allBounds();
+    view.zoom = 1;
+    if (b) { view.x = (window.innerWidth - b.width) / 2 - b.x; view.y = (window.innerHeight - b.height) / 2 - b.y; }
+    else { view.x = 0; view.y = 0; }
+    render();
+  }
+  function zoomBy(f, sx, sy) {
+    const before = screenToWorld(sx, sy);
+    view.zoom = clamp(view.zoom * f, 0.1, 8);
+    view.x = sx - before.x * view.zoom; view.y = sy - before.y * view.zoom;
+    render();
+  }
+
+  /* ============================ Экспорт ============================ */
+  function exportPNG() {
+    if (!state.elements.length) { toast("Доска пуста"); return; }
+    const b = allBounds(), pad = 40, scale = 2;
+    const w = Math.ceil(b.width * scale + pad * 2), h = Math.ceil(b.height * scale + pad * 2);
+    const tc = document.createElement("canvas"); tc.width = w; tc.height = h;
+    const c = tc.getContext("2d");
+    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#fff"; c.fillRect(0, 0, w, h);
+    c.setTransform(scale, 0, 0, scale, pad - b.x * scale, pad - b.y * scale);
+    for (const el of state.elements) drawElement(c, el);
+    const a = document.createElement("a"); a.href = tc.toDataURL("image/png"); a.download = "board.png"; a.click();
+    toast("PNG сохранён");
+  }
+
+  /* ============================ UI: тулбар ============================ */
+  function updateCursor() {
+    if (spaceDown || state.tool === "hand") canvas.style.cursor = "grab";
+    else if (state.tool === "selection") canvas.style.cursor = "default";
+    else if (state.tool === "text") canvas.style.cursor = "text";
+    else if (state.tool === "eraser") canvas.style.cursor = "none";
+    else canvas.style.cursor = "crosshair";
+  }
+  const toolButtons = {};
+  function setTool(id) {
+    state.tool = id;
+    state.suggestedBinding = null;
+    for (const k in toolButtons) toolButtons[k].classList.toggle("active", k === id);
+    if (id !== "selection") clearSelection();
+    updateCursor(); updateContextPanel(); render();
+  }
+  function buildToolbar() {
+    for (const t of TOOLS) {
+      const b = document.createElement("button");
+      b.className = "tool-btn" + (t.id === state.tool ? " active" : "");
+      b.title = t.label;
+      b.innerHTML = ICONS[t.icon] + (SHAPE_TOOLS.indexOf(t.id) !== -1 ? '<span class="tool-dot"></span>' : "");
+      b.addEventListener("click", () => { setTool(t.id); b.blur(); });
+      // у фигур сбоку появляется выбор: от угла или от центра
+      if (SHAPE_TOOLS.indexOf(t.id) !== -1) {
+        b.addEventListener("mouseenter", () => showDrawModePop(b, t.id));
+        b.addEventListener("mouseleave", () => hideDrawModePop(true));
+      }
+      toolbar.appendChild(b); toolButtons[t.id] = b;
+    }
+    updateDrawModeUI();
+  }
+
+  /* ===================== Попувер «как рисовать фигуру» ===================== */
+  const drawModePop = document.getElementById("drawModePop");
+  const helpPanel = document.getElementById("helpPanel");
+  const SHAPE_TOOLS = ["rectangle", "diamond", "ellipse"];
+  let popHideTimer = null;
+
+  function showDrawModePop(btn, toolId) {
+    clearTimeout(popHideTimer);
+    drawModePop.dataset.tool = toolId;
+    drawModePop.classList.add("open");
+    const r = btn.getBoundingClientRect();
+    drawModePop.style.left = (r.right + 10) + "px";
+    const h = drawModePop.offsetHeight || 160;
+    drawModePop.style.top = clamp(r.top + r.height / 2 - h / 2, 10, window.innerHeight - h - 10) + "px";
+    menu.classList.remove("open");
+    helpPanel.classList.remove("open");
+    document.getElementById("helpBtn").classList.remove("active");
+  }
+  function hideDrawModePop(delay) {
+    clearTimeout(popHideTimer);
+    popHideTimer = setTimeout(() => drawModePop.classList.remove("open"), delay ? 170 : 0);
+  }
+  function updateDrawModeUI() {
+    drawModePop.querySelectorAll("[data-dm]").forEach((b) => b.classList.toggle("active", b.dataset.dm === state.shapeDrawMode));
+    for (const id of SHAPE_TOOLS) {
+      const btn = toolButtons[id]; if (!btn) continue;
+      const dot = btn.querySelector(".tool-dot");
+      if (dot) dot.classList.toggle("on", state.shapeDrawMode === "center");
+    }
+  }
+  function setShapeDrawMode(m, toolId) {
+    state.shapeDrawMode = m;
+    updateDrawModeUI();
+    if (toolId) setTool(toolId);
+    hideDrawModePop(false);
+    toast(m === "center" ? "Фигура рисуется от центра" : "Фигура рисуется от угла");
+  }
+  drawModePop.addEventListener("mouseenter", () => clearTimeout(popHideTimer));
+  drawModePop.addEventListener("mouseleave", () => hideDrawModePop(true));
+  drawModePop.addEventListener("click", function (e) {
+    const b = e.target.closest("[data-dm]");
+    if (!b) return;
+    setShapeDrawMode(b.dataset.dm, drawModePop.dataset.tool);
+  });
+
+  /* ===================== Панель горячих клавиш ===================== */
+  const HELP = [
+    { s: "Инструменты", rows: [
+      [["V"], "Выбор и перемещение"], [["H"], "Панорама (рука)"],
+      [["R"], "Прямоугольник"], [["D"], "Ромб"], [["O"], "Эллипс"],
+      [["A"], "Стрелка"], [["L"], "Линия"], [["P"], "Свободное рисование"],
+      [["T"], "Текст"], [["E"], "Ластик (удаляет объект целиком)"]
+    ]},
+    { s: "Фигуры и линии", rows: [
+      [["Ctrl", "тянуть"], "скопировать фигуру"],
+      [["Shift"], "ровный круг / квадрат / ромб"],
+      [["Shift"], "угол 15° у линии и стрелки"],
+      [["печать"], "вписать текст в выделенную фигуру"],
+      [["Enter"], "править текст элемента"],
+      [["2× клик"], "то же самое"],
+      [["Shift", "клик"], "добавить к выделению"],
+      [["средняя точка"], "изогнуть линию / стрелку"]
+    ]},
+    { s: "Действия", rows: [
+      [["Ctrl", "Z"], "отменить"], [["Ctrl", "Shift", "Z"], "повторить"],
+      [["Ctrl", "A"], "выделить всё"], [["Ctrl", "V"], "вставить копию у курсора"],
+      [["Ctrl", "D"], "дублировать"], [["Delete"], "удалить выбранное"],
+      [["]"], "на передний план"], [["["], "на задний план"], [["Esc"], "снять выделение"]
+    ]},
+    { s: "Холст", rows: [
+      [["Ctrl", "колесо"], "зум к курсору"], [["Space", "тянуть"], "панорама"],
+      [["колесо"], "панорама"], [["G"], "привязка к сетке"],
+      [["Shift", "1"], "по размеру доски"], [["Ctrl", "0"], "сбросить зум"],
+      [["?"], "эта справка"]
+    ]}
+  ];
+  function buildHelp() {
+    const body = document.getElementById("helpBody");
+    body.innerHTML = "";
+    for (const sec of HELP) {
+      const h = mk("div", "hp-sec"); h.textContent = sec.s; body.appendChild(h);
+      for (const r of sec.rows) {
+        const row = mk("div", "hp-row");
+        const label = mk("span"); label.textContent = r[1];
+        const keys = mk("div", "hp-keys");
+        for (const k of r[0]) { const kb = document.createElement("kbd"); kb.textContent = k; keys.appendChild(kb); }
+        row.appendChild(label); row.appendChild(keys);
+        body.appendChild(row);
+      }
+    }
+  }
+  function toggleHelp(force) {
+    const open = force === undefined ? !helpPanel.classList.contains("open") : force;
+    helpPanel.classList.toggle("open", open);
+    document.getElementById("helpBtn").classList.toggle("active", open);
+    if (open) { menu.classList.remove("open"); hideDrawModePop(false); }
+  }
+  document.getElementById("helpBtn").addEventListener("click", function (e) {
+    e.stopPropagation(); toggleHelp(); this.blur();
+  });
+  document.getElementById("helpClose").addEventListener("click", function () { toggleHelp(false); });
+  document.addEventListener("click", function (e) {
+    if (!helpPanel.contains(e.target) && e.target.id !== "helpBtn") toggleHelp(false);
+  });
+
+  /* ============================ UI: свойства ============================ */
+  const propButtons = {};
+  const groups = {};
+  function mk(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+
+  function swatch(color, prop, isBg) {
+    const b = document.createElement("button");
+    b.className = "swatch" + (color === "transparent" ? " transparent" : "");
+    if (color !== "transparent") b.style.background = color;
+    b.title = color === "transparent" ? "Без заливки" : color;
+    b.dataset.value = color;
+    b.addEventListener("click", () => { setStyleProp(prop, color); b.blur(); });
+    (propButtons[prop] = propButtons[prop] || []).push(b);
+    return b;
+  }
+  function optBtn(icon, value, prop, title, text) {
+    const b = document.createElement("button");
+    b.className = "opt-btn" + (text ? " opt-text" : "");
+    b.title = title; b.dataset.value = String(value);
+    b.innerHTML = text || ICONS[icon];
+    b.addEventListener("click", () => { setStyleProp(prop, value); b.blur(); });
+    (propButtons[prop] = propButtons[prop] || []).push(b);
+    return b;
+  }
+  function group(id) { const g = mk("div", "prop-group"); g.id = id; groups[id] = g; return g; }
+
+  function buildProperties() {
+    props.innerHTML = "";
+    propButtons.strokeColor = []; propButtons.backgroundColor = []; propButtons.fillStyle = [];
+    propButtons.strokeWidth = []; propButtons.strokeStyle = []; propButtons.roughness = [];
+    propButtons.roundness = []; propButtons.lineType = []; propButtons.fontSize = []; propButtons.fontFamily = [];
+
+    // undo / redo
+    const u = mk("button", "icon-btn"); u.id = "btnUndo"; u.title = "Отменить (Ctrl+Z)"; u.innerHTML = ICONS.undo;
+    u.addEventListener("click", () => { undo(); u.blur(); });
+    const r = mk("button", "icon-btn"); r.id = "btnRedo"; r.title = "Повторить (Ctrl+Shift+Z)"; r.innerHTML = ICONS.redo;
+    r.addEventListener("click", () => { redo(); r.blur(); });
+    props.appendChild(u); props.appendChild(r);
+    props.appendChild(mk("div", "sep"));
+
+    // цвета обводки
+    const gc = group("gColors");
+    for (const c of STROKE_COLORS) gc.appendChild(swatch(c, "strokeColor", false));
+    gc.appendChild(mk("div", "sep"));
+    const bgWrap = mk("span"); bgWrap.id = "bgWrap"; bgWrap.style.display = "contents";
+    for (const c of BG_COLORS) bgWrap.appendChild(swatch(c, "backgroundColor", true));
+    gc.appendChild(bgWrap);
+    props.appendChild(gc);
+
+    // заливка
+    const gf = group("gFill"); gf.title = "Стиль заливки";
+    gf.appendChild(optBtn("fillHachure", "hachure", "fillStyle", "Штриховка"));
+    gf.appendChild(optBtn("fillCross", "cross-hatch", "fillStyle", "Сетка"));
+    gf.appendChild(optBtn("fillSolid", "solid", "fillStyle", "Заливка"));
+    props.appendChild(gf);
+
+    // толщина
+    const gw = group("gSW");
+    gw.appendChild(optBtn("w1", 1, "strokeWidth", "Тонкая"));
+    gw.appendChild(optBtn("w2", 2, "strokeWidth", "Средняя"));
+    gw.appendChild(optBtn("w4", 4, "strokeWidth", "Толстая"));
+    props.appendChild(gw);
+
+    // стиль линии
+    const gs = group("gSS");
+    gs.appendChild(optBtn("sSolid", "solid", "strokeStyle", "Сплошная"));
+    gs.appendChild(optBtn("sDashed", "dashed", "strokeStyle", "Пунктир"));
+    gs.appendChild(optBtn("sDotted", "dotted", "strokeStyle", "Точки"));
+    props.appendChild(gs);
+
+    // неаккуратность
+    const gsl = group("gSl");
+    gsl.appendChild(optBtn("sl1", 1, "roughness", "Художник"));
+    gsl.appendChild(optBtn("sl0", 0, "roughness", "Архитектор"));
+    gsl.appendChild(optBtn("sl2", 2, "roughness", "Карикатура"));
+    props.appendChild(gsl);
+
+    // грани: скруглённые / острые (эскиз) / ровные (точная геометрия)
+    const ge = group("gEd");
+    ge.appendChild(optBtn("edgeRound", 2, "roundness", "Скруглённые"));
+    ge.appendChild(optBtn("edgeSharp", null, "roundness", "Острые"));
+    ge.appendChild(optBtn("edgePlain", "plain", "roundness", "Ровные (точные)"));
+    props.appendChild(ge);
+
+    // изгиб линии/стрелки: сплайн или резкий угол
+    const glt = group("gLT");
+    glt.appendChild(optBtn("ltSpline", "spline", "lineType", "Сплайн (плавная кривая)"));
+    glt.appendChild(optBtn("ltSharp", "sharp", "lineType", "Резкий угол"));
+    props.appendChild(glt);
+
+    // размер шрифта
+    const gfs = group("gFS");
+    for (const f of FONT_SIZES) gfs.appendChild(optBtn(null, f.v, "fontSize", "Размер " + f.t, f.t));
+    props.appendChild(gfs);
+
+    // шрифт
+    const gff = group("gFF");
+    gff.appendChild(optBtn(null, 1, "fontFamily", "Рукописный", "✍"));
+    gff.appendChild(optBtn(null, 2, "fontFamily", "Обычный", "A"));
+    gff.appendChild(optBtn(null, 3, "fontFamily", "Код", "</>"));
+    props.appendChild(gff);
+
+    updateHistoryButtons();
+  }
+
+  function setStyleProp(prop, value) {
+    state.style[prop] = value;
+    if (state.selectedElementIds.length) {
+      for (const id of state.selectedElementIds) { const el = byId(id); if (el) el[prop] = value; }
+      pushHistory();
+    }
+    updateContextPanel(); render();
+  }
+
+  function targetTypes() {
+    if (state.selectedElementIds.length) return state.selectedElementIds.map((id) => byId(id).type);
+    const m = { rectangle: "rectangle", diamond: "diamond", ellipse: "ellipse", arrow: "arrow", line: "line", freedraw: "freedraw", text: "text" };
+    return state.tool && m[state.tool] ? [m[state.tool]] : [];
+  }
+  function show(id, on) { if (groups[id]) groups[id].style.display = on ? "flex" : "none"; }
+
+  function updateContextPanel() {
+    if (state.selectedElementIds.length === 1) {
+      const el = byId(state.selectedElementIds[0]);
+      if (el) {
+        ["strokeColor", "backgroundColor", "fillStyle", "strokeWidth", "strokeStyle", "roughness", "roundness", "lineType", "fontSize", "fontFamily"].forEach((k) => {
+          if (el[k] !== undefined) state.style[k] = el[k];
+        });
+      }
+    }
+    const all = targetTypes();
+    const onlyShape = all.length > 0 && all.every((t) => t === "rectangle" || t === "diamond" || t === "ellipse");
+    const hasShape = all.some((t) => t === "rectangle" || t === "diamond" || t === "ellipse");
+    const hasLine = all.some((t) => t === "arrow" || t === "line" || t === "freedraw");
+    const hasLinear = all.some((t) => t === "arrow" || t === "line");
+    const hasText = all.some((t) => t === "text");
+    const any = all.length > 0;
+
+    show("gColors", any);
+    const bg = document.getElementById("bgWrap"); if (bg) bg.style.display = hasShape ? "contents" : "none";
+    show("gFill", hasShape);
+    show("gSW", hasShape || hasLine);
+    show("gSS", hasShape || hasLine);
+    show("gSl", hasShape || hasLine);
+    show("gEd", onlyShape);
+    show("gLT", hasLinear);
+    show("gFS", hasText || hasShape);
+    show("gFF", hasText || hasShape);
+
+    for (const prop in propButtons) {
+      const val = state.style[prop];
+      for (const b of propButtons[prop]) b.classList.toggle("active", b.dataset.value === String(val));
+    }
+  }
+
+  /* ============================ Меню / прочее ============================ */
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
+  }
+
+  document.getElementById("menuBtn").addEventListener("click", function (e) {
+    menu.classList.toggle("open"); e.stopPropagation(); this.blur();
+    if (menu.classList.contains("open")) toggleHelp(false);
+  });
+  document.addEventListener("click", function (e) {
+    if (!menu.contains(e.target)) menu.classList.remove("open");
+  });
+  function updateMenuChips() {
+    menu.querySelectorAll("[data-bg]").forEach((b) => b.classList.toggle("active", b.dataset.bg === state.background));
+    menu.querySelectorAll("[data-snap]").forEach((b) => b.classList.toggle("active", (b.dataset.snap === "grid") === state.snapToGrid));
+    const sb = document.getElementById("snapBtn");
+    if (sb) sb.classList.toggle("active", state.snapToGrid);
+  }
+  function setBackground(bg) { state.background = bg; updateMenuChips(); render(); }
+  function setSnap(on) {
+    state.snapToGrid = on;
+    // привязка без видимой сетки неинформативна — включаем точки
+    if (on && state.background === "none") state.background = "dots";
+    updateMenuChips(); render();
+    toast(on ? "Перемещение по сетке" : "Свободное перемещение");
+  }
+
+  menu.addEventListener("click", function (e) {
+    const t = e.target;
+    if (t.dataset && t.dataset.bg) { e.stopPropagation(); setBackground(t.dataset.bg); return; }
+    if (t.dataset && t.dataset.snap) { e.stopPropagation(); setSnap(t.dataset.snap === "grid"); return; }
+    const act = t.dataset && t.dataset.act;
+    if (!act) return;
+    menu.classList.remove("open");
+    if (act === "png") exportPNG();
+    else if (act === "fit") zoomToFit();
+    else if (act === "reset") resetZoom();
+    else if (act === "clear") { if (state.elements.length && confirm("Очистить всю доску?")) { state.elements = []; clearSelection(); pushHistory(); render(); } }
+  });
+  document.getElementById("snapBtn").addEventListener("click", function () { setSnap(!state.snapToGrid); this.blur(); });
+  document.getElementById("zoomIn").addEventListener("click", function () { zoomBy(1.2, window.innerWidth / 2, window.innerHeight / 2); this.blur(); });
+  document.getElementById("zoomOut").addEventListener("click", function () { zoomBy(1 / 1.2, window.innerWidth / 2, window.innerHeight / 2); this.blur(); });
+
+  /* ============================ Ресайз ============================ */
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    render();
+  }
+  window.addEventListener("resize", resize);
+
+  /* ============================ Старт ============================ */
+  state.mouseWorld = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+  buildToolbar();
+  buildProperties();
+  buildHelp();
+  resize();
+  updateCursor();
+  updateContextPanel();
+  updateMenuChips();
+  pushHistory();
+
+  // Перерисовать после загрузки рукописного шрифта (точные границы текста)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());
+})();
+</script>
+</body>
+</html>
