@@ -1186,12 +1186,14 @@
     if (!sel.length) return;
     state.elements = state.elements.filter((e) => !isSelected(e.id)).concat(sel);
     pushHistory(); render();
+    toast(sel.length > 1 ? "На передний план (" + sel.length + ")" : "На передний план");
   }
   function sendToBack() {
     const sel = state.elements.filter((e) => isSelected(e.id));
     if (!sel.length) return;
     state.elements = sel.concat(state.elements.filter((e) => !isSelected(e.id)));
     pushHistory(); render();
+    toast(sel.length > 1 ? "На задний план (" + sel.length + ")" : "На задний план");
   }
 
   /* ============================ Ластик ============================ */
@@ -1729,8 +1731,10 @@
 
     const map = { v: "selection", h: "hand", r: "rectangle", d: "diamond", o: "ellipse", a: "arrow", l: "line", p: "freedraw", t: "text", e: "eraser" };
     if (!meta && map[key]) { setTool(map[key]); return; }
-    if (!meta && (key === "]" || e.code === "BracketRight")) { bringToFront(); return; }
-    if (!meta && (key === "[" || e.code === "BracketLeft")) { sendToBack(); return; }
+    // Порядок слоёв: Alt + ] / Alt + [ (по e.code — работает на любой раскладке).
+    // Голые ] и [ намеренно не заняты: ими можно печатать в подписи фигур.
+    if (!meta && e.altKey && e.code === "BracketRight") { e.preventDefault(); bringToFront(); return; }
+    if (!meta && e.altKey && e.code === "BracketLeft") { e.preventDefault(); sendToBack(); return; }
   });
   window.addEventListener("keyup", function (e) { if (e.code === "Space") { spaceDown = false; updateCursor(); } });
 
@@ -1895,7 +1899,7 @@
       [["Ctrl", "Z"], "отменить"], [["Ctrl", "Shift", "Z"], "повторить"],
       [["Ctrl", "A"], "выделить всё"], [["Ctrl", "V"], "вставить копию у курсора"],
       [["Ctrl", "D"], "дублировать"], [["Delete"], "удалить выбранное"],
-      [["]"], "на передний план"], [["["], "на задний план"], [["Esc"], "снять выделение"]
+      [["Alt", "]"], "на передний план"], [["Alt", "["], "на задний план"], [["Esc"], "снять выделение"]
     ]},
     { s: "Холст", rows: [
       [["Ctrl", "колесо"], "зум к курсору"], [["Space", "тянуть"], "панорама"],
