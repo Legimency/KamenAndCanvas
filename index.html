@@ -17,7 +17,8 @@
   .panel { background:#ffffff; border-radius:12px; box-shadow:0 4px 16px rgba(15,23,42,.12), 0 1px 2px rgba(15,23,42,.08); }
 
   /* Левая панель инструментов */
-  #toolbar { position:fixed; left:12px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:2px; padding:6px; z-index:20; }
+  #toolbar { position:fixed; left:12px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:2px; padding:6px; z-index:20; max-height:calc(100vh - 24px); overflow-y:auto; scrollbar-width:none; }
+  #toolbar::-webkit-scrollbar { display:none; }
   /* на низких экранах тулбар не наезжает на бренд сверху */
   @media (max-height:600px) { #toolbar { top:64px; transform:none; } }
   .tool-btn { position:relative; width:38px; height:38px; border:none; background:transparent; border-radius:9px; display:flex; align-items:center; justify-content:center; color:#374151; cursor:pointer; transition:background .12s, color .12s; }
@@ -25,27 +26,66 @@
   .tool-dot.on { opacity:1; }
   .tool-btn:hover { background:#f1f5f9; }
   .tool-btn.active { background:#e0e7ff; color:#4338ca; }
+  .tool-btn:disabled { opacity:.35; cursor:default; }
+  .tool-btn:disabled:hover { background:transparent; }
   .tool-btn svg { width:20px; height:20px; }
 
-  /* Верхняя панель свойств */
-  #properties { position:fixed; top:12px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:6px; padding:6px 10px; z-index:20; max-width:96vw; flex-wrap:wrap; justify-content:center; }
-  .prop-group { display:flex; align-items:center; gap:4px; }
+  /* Верхняя панель параметров: отдельный подписанный ряд для каждой настройки */
+  #properties {
+    position:fixed; top:12px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; gap:0; padding:10px 12px 11px;
+    z-index:20; width:min(340px, calc(100vw - 24px));
+    max-height:min(70vh, 560px); overflow-y:auto; scrollbar-width:thin;
+    border:1px solid rgba(226,232,240,.9);
+  }
+  #properties.hidden { display:none; }
+  .prop-panel-head {
+    display:flex; align-items:center; gap:6px; padding:0 0 7px 2px; margin-bottom:3px;
+    border-bottom:1px solid #f1f5f9; cursor:grab; user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .prop-grip { display:flex; color:#cbd5e1; flex:0 0 auto; transition:color .12s; }
+  .prop-grip svg { width:14px; height:14px; }
+  .prop-panel-head:hover .prop-grip { color:#6366f1; }
+  .prop-panel-title { font-family:"Caveat",cursive; font-size:22px; line-height:1; color:#0f172a; }
+  .prop-panel-note { font-size:10px; color:#94a3b8; margin-left:auto; white-space:nowrap; }
+  .prop-reset {
+    width:24px; height:24px; flex:0 0 24px; border:none; border-radius:7px; background:transparent;
+    color:#94a3b8; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:background .12s, color .12s, transform .3s;
+  }
+  .prop-reset:hover { background:#eef2ff; color:#4338ca; }
+  .prop-reset:active { transform:rotate(-180deg); }
+  .prop-reset svg { width:14px; height:14px; }
+  #properties.dragging { box-shadow:0 18px 40px rgba(15,23,42,.22), 0 2px 6px rgba(15,23,42,.1); transition:none; }
+  #properties.dragging .prop-panel-head { cursor:grabbing; }
+  .prop-row { display:grid; grid-template-columns:94px minmax(0,1fr); align-items:center; gap:8px; min-height:34px; padding:3px 3px; border-bottom:1px solid #f8fafc; }
+  .prop-row:last-child { border-bottom:none; }
+  .prop-label { font-size:11px; color:#64748b; font-weight:600; white-space:nowrap; }
+  .prop-group { display:flex; align-items:center; justify-content:flex-start; gap:5px; min-width:0; flex-wrap:wrap; }
   .sep { width:1px; height:22px; background:#e5e7eb; margin:0 2px; }
+  .tool-history { display:flex; flex-direction:column; gap:1px; padding-bottom:4px; margin-bottom:3px; border-bottom:1px solid #e5e7eb; }
+  .tool-history .tool-btn { height:34px; color:#64748b; }
+  .tool-history .tool-btn svg { width:18px; height:18px; }
   .icon-btn { width:30px; height:30px; border:none; background:transparent; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#374151; cursor:pointer; }
   .icon-btn:hover:not(:disabled) { background:#f1f5f9; }
   .icon-btn:disabled { opacity:.35; cursor:default; }
   .icon-btn svg { width:18px; height:18px; }
 
-  .swatch { width:22px; height:22px; border-radius:9999px; border:1px solid rgba(0,0,0,.12); cursor:pointer; padding:0; position:relative; }
+  .swatch { width:20px; height:20px; border-radius:9999px; border:1px solid rgba(0,0,0,.12); cursor:pointer; padding:0; position:relative; flex:0 0 20px; }
   .swatch.active { box-shadow:0 0 0 2px #fff, 0 0 0 4px #6366f1; }
   .swatch.transparent { background:#fff; }
   .swatch.transparent::after { content:""; position:absolute; left:2px; right:2px; top:50%; height:1.5px; background:#ef4444; transform:rotate(-45deg); }
 
-  .opt-btn { border:none; background:transparent; border-radius:7px; padding:4px; cursor:pointer; color:#374151; display:flex; align-items:center; justify-content:center; }
+  .opt-btn { border:none; background:transparent; border-radius:7px; padding:4px; min-width:28px; min-height:28px; cursor:pointer; color:#374151; display:flex; align-items:center; justify-content:center; }
   .opt-btn:hover { background:#f1f5f9; }
   .opt-btn.active { background:#e0e7ff; color:#4338ca; }
   .opt-btn svg { width:18px; height:18px; display:block; }
   .opt-text { font-size:12px; font-weight:600; padding:2px 6px; }
+  @media (max-width:760px) {
+    #properties { left:auto; right:12px; transform:none; width:min(310px, calc(100vw - 76px)); max-height:58vh; }
+    .prop-row { grid-template-columns:82px minmax(0,1fr); gap:5px; }
+    .prop-label { font-size:10px; }
+  }
 
   /* Нижняя панель зума */
   #zoomPanel { position:fixed; left:12px; bottom:12px; display:flex; align-items:center; gap:2px; padding:5px 7px; z-index:20; }
@@ -53,7 +93,7 @@
 
   /* Меню */
   #menuWrap { position:fixed; left:12px; bottom:58px; z-index:20; }
-  #menu { position:absolute; bottom:38px; left:0; width:190px; padding:6px; display:none; flex-direction:column; }
+  #menu { position:absolute; bottom:38px; left:0; width:224px; padding:6px; display:none; flex-direction:column; }
   #menu.open { display:flex; }
   .menu-item { text-align:left; border:none; background:transparent; padding:7px 10px; border-radius:7px; font-size:13px; color:#374151; cursor:pointer; }
   .menu-item:hover { background:#f1f5f9; }
@@ -139,6 +179,11 @@
     background:#1e293b; border:1px solid #334155; border-bottom-width:2px;
     border-radius:5px; padding:2px 5px; color:#e2e8f0; white-space:nowrap;
   }
+  .hp-note {
+    font-size:11px; line-height:1.45; color:#94a3b8;
+    background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.24);
+    border-radius:8px; padding:7px 9px; margin-top:2px;
+  }
 
   /* Временный ввод текста */
   .board-text-input { position:fixed; z-index:40; margin:0; padding:2px 3px; min-width:60px; background:transparent; border:1px dashed #6965db; border-radius:3px; outline:none; resize:none; overflow:hidden; white-space:pre; box-sizing:border-box; line-height:1.25; caret-color:#6965db; }
@@ -182,6 +227,8 @@
       <button class="menu-chip" data-snap="free">Свободно</button>
       <button class="menu-chip" data-snap="grid">По сетке</button>
     </div>
+    <div class="menu-label">Окна</div>
+    <button class="menu-item" data-act="resetPanel">↺ Сбросить положение окна параметров</button>
     <div class="sep" style="width:100%;height:1px;margin:4px 0;"></div>
     <button class="menu-item" data-act="clear" style="color:#dc2626">🗑 Очистить доску</button>
   </div>
@@ -1615,11 +1662,30 @@
   });
 
   /* ============================ Клавиатура ============================ */
+  // Раскладко-независимая клавиша: берём ФИЗИЧЕСКУЮ клавишу (e.code),
+  // поэтому шорткаты работают и на русской, и на любой другой раскладке.
+  const PUNCT_CODES = {
+    Backquote: "`", Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]",
+    Backslash: "\\", Semicolon: ";", Quote: "'", Comma: ",", Period: ".", Slash: "/",
+    Space: " ", Enter: "enter", Escape: "escape", Tab: "tab",
+    Delete: "delete", Backspace: "backspace", ArrowUp: "up", ArrowDown: "down",
+    ArrowLeft: "left", ArrowRight: "right", NumpadAdd: "=", NumpadSubtract: "-",
+    NumpadDecimal: ".", NumpadEnter: "enter"
+  };
+  function latinKey(e) {
+    const c = e.code || "";
+    if (/^Key[A-Z]$/.test(c)) return c.slice(3).toLowerCase();
+    if (/^Digit\d$/.test(c)) return c.slice(5);
+    if (/^Numpad\d$/.test(c)) return c.slice(6);
+    if (PUNCT_CODES[c] !== undefined) return PUNCT_CODES[c].toLowerCase();
+    return (e.key || "").toLowerCase(); // фолбэк
+  }
+
   window.addEventListener("keydown", function (e) {
     const tag = (e.target && e.target.tagName || "").toLowerCase();
     if (tag === "textarea" || tag === "input") return;
     const meta = e.ctrlKey || e.metaKey;
-    const key = (e.key || "").toLowerCase();
+    const key = latinKey(e);            // латинская клавиша по физическому положению — для шорткатов
 
     if (e.code === "Space") { e.preventDefault(); spaceDown = true; updateCursor(); return; }
     if (meta && key === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
@@ -1638,19 +1704,20 @@
     if (meta && key === "d") { e.preventDefault(); duplicate(); return; }
     if (meta && e.code === "Digit0") { e.preventDefault(); resetZoom(); return; }
     if (e.shiftKey && e.code === "Digit1") { e.preventDefault(); zoomToFit(); return; }
-    if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedElementIds.length) { e.preventDefault(); deleteSelected(); } return; }
-    if (e.key === "Escape") { toggleHelp(false); clearSelection(); setTool("selection"); render(); return; }
+    if (key === "delete" || key === "backspace") { if (state.selectedElementIds.length) { e.preventDefault(); deleteSelected(); } return; }
+    if (key === "escape") { toggleHelp(false); clearSelection(); setTool("selection"); render(); return; }
     if (e.key === "?" || (e.shiftKey && key === "/")) { e.preventDefault(); toggleHelp(); return; }
 
     const sel = state.selectedElementIds.length === 1 ? byId(state.selectedElementIds[0]) : null;
     if (sel && (sel.type === "text" || isLabelable(sel))) {
-      if (e.key === "Enter") {
+      if (key === "enter") {
         e.preventDefault();
         if (sel.type === "text") openTextEditor(sel, sel.x, sel.y);
         else openTextEditor(sel);
         return;
       }
-      if (!meta && e.key.length === 1 && !e.altKey) {
+      // печатаемый символ — вставляем как есть (работает и с кириллицей)
+      if (!meta && !e.altKey && e.key && e.key.length === 1 && key !== "tab") {
         e.preventDefault();
         if (sel.type === "text") openTextEditor(sel, sel.x, sel.y, e.key);
         else openTextEditor(sel, 0, 0, e.key);
@@ -1662,8 +1729,8 @@
 
     const map = { v: "selection", h: "hand", r: "rectangle", d: "diamond", o: "ellipse", a: "arrow", l: "line", p: "freedraw", t: "text", e: "eraser" };
     if (!meta && map[key]) { setTool(map[key]); return; }
-    if (!meta && key === "]") { bringToFront(); return; }
-    if (!meta && key === "[") { sendToBack(); return; }
+    if (!meta && (key === "]" || e.code === "BracketRight")) { bringToFront(); return; }
+    if (!meta && (key === "[" || e.code === "BracketLeft")) { sendToBack(); return; }
   });
   window.addEventListener("keyup", function (e) { if (e.code === "Space") { spaceDown = false; updateCursor(); } });
 
@@ -1728,6 +1795,23 @@
     updateCursor(); updateContextPanel(); render();
   }
   function buildToolbar() {
+    const history = mk("div", "tool-history");
+    const undoBtn = mk("button", "tool-btn");
+    undoBtn.id = "btnUndo";
+    undoBtn.title = "Отменить (Ctrl+Z)";
+    undoBtn.setAttribute("aria-label", "Отменить");
+    undoBtn.innerHTML = ICONS.undo;
+    undoBtn.addEventListener("click", () => { undo(); undoBtn.blur(); });
+    const redoBtn = mk("button", "tool-btn");
+    redoBtn.id = "btnRedo";
+    redoBtn.title = "Повторить (Ctrl+Shift+Z)";
+    redoBtn.setAttribute("aria-label", "Повторить");
+    redoBtn.innerHTML = ICONS.redo;
+    redoBtn.addEventListener("click", () => { redo(); redoBtn.blur(); });
+    history.appendChild(undoBtn);
+    history.appendChild(redoBtn);
+    toolbar.appendChild(history);
+
     for (const t of TOOLS) {
       const b = document.createElement("button");
       b.className = "tool-btn" + (t.id === state.tool ? " active" : "");
@@ -1823,6 +1907,9 @@
   function buildHelp() {
     const body = document.getElementById("helpBody");
     body.innerHTML = "";
+    const note = mk("div", "hp-note");
+    note.textContent = "Работает на любой раскладке (RU / EN и др.) — клавиши распознаются по физическому положению.";
+    body.appendChild(note);
     for (const sec of HELP) {
       const h = mk("div", "hp-sec"); h.textContent = sec.s; body.appendChild(h);
       for (const r of sec.rows) {
@@ -1873,7 +1960,18 @@
     (propButtons[prop] = propButtons[prop] || []).push(b);
     return b;
   }
-  function group(id) { const g = mk("div", "prop-group"); g.id = id; groups[id] = g; return g; }
+  function group(id, label) {
+    const row = mk("div", "prop-row");
+    row.id = id;
+    const title = mk("div", "prop-label");
+    title.textContent = label;
+    const controls = mk("div", "prop-group");
+    row.appendChild(title);
+    row.appendChild(controls);
+    props.appendChild(row);
+    groups[id] = row;
+    return controls;
+  }
 
   function buildProperties() {
     props.innerHTML = "";
@@ -1881,77 +1979,147 @@
     propButtons.strokeWidth = []; propButtons.strokeStyle = []; propButtons.roughness = [];
     propButtons.roundness = []; propButtons.lineType = []; propButtons.fontSize = []; propButtons.fontFamily = [];
 
-    // undo / redo
-    const u = mk("button", "icon-btn"); u.id = "btnUndo"; u.title = "Отменить (Ctrl+Z)"; u.innerHTML = ICONS.undo;
-    u.addEventListener("click", () => { undo(); u.blur(); });
-    const r = mk("button", "icon-btn"); r.id = "btnRedo"; r.title = "Повторить (Ctrl+Shift+Z)"; r.innerHTML = ICONS.redo;
-    r.addEventListener("click", () => { redo(); r.blur(); });
-    props.appendChild(u); props.appendChild(r);
-    props.appendChild(mk("div", "sep"));
+    const head = mk("div", "prop-panel-head");
+    head.title = "Перетащите, чтобы переместить окно";
+    head.innerHTML =
+      '<span class="prop-grip"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span>' +
+      '<span class="prop-panel-title">Параметры</span>' +
+      '<span class="prop-panel-note">инструмент / фигура</span>' +
+      '<button class="prop-reset" type="button" title="Вернуть окно на место"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>';
+    props.appendChild(head);
+    head.querySelector(".prop-reset").addEventListener("click", function (e) {
+      e.stopPropagation(); resetPropsPos(); this.blur();
+    });
+    head.addEventListener("pointerdown", startPropsDrag);
+    head.addEventListener("pointermove", movePropsDrag);
+    head.addEventListener("pointerup", endPropsDrag);
+    head.addEventListener("pointercancel", endPropsDrag);
+    head.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) resetPropsPos(); });
+    applyPropsPos();
 
-    // цвета обводки
-    const gc = group("gColors");
+    // Цвета — отдельные подписанные строки
+    const gc = group("gColors", "Цвет контура");
     for (const c of STROKE_COLORS) gc.appendChild(swatch(c, "strokeColor", false));
-    gc.appendChild(mk("div", "sep"));
-    const bgWrap = mk("span"); bgWrap.id = "bgWrap"; bgWrap.style.display = "contents";
-    for (const c of BG_COLORS) bgWrap.appendChild(swatch(c, "backgroundColor", true));
-    gc.appendChild(bgWrap);
-    props.appendChild(gc);
+    const gb = group("gBg", "Цвет заливки");
+    for (const c of BG_COLORS) gb.appendChild(swatch(c, "backgroundColor", true));
 
-    // заливка
-    const gf = group("gFill"); gf.title = "Стиль заливки";
+    // Заливка и контур
+    const gf = group("gFill", "Штриховка");
     gf.appendChild(optBtn("fillHachure", "hachure", "fillStyle", "Штриховка"));
     gf.appendChild(optBtn("fillCross", "cross-hatch", "fillStyle", "Сетка"));
     gf.appendChild(optBtn("fillSolid", "solid", "fillStyle", "Заливка"));
-    props.appendChild(gf);
 
-    // толщина
-    const gw = group("gSW");
+    const gw = group("gSW", "Толщина");
     gw.appendChild(optBtn("w1", 1, "strokeWidth", "Тонкая"));
     gw.appendChild(optBtn("w2", 2, "strokeWidth", "Средняя"));
     gw.appendChild(optBtn("w4", 4, "strokeWidth", "Толстая"));
-    props.appendChild(gw);
 
-    // стиль линии
-    const gs = group("gSS");
+    const gs = group("gSS", "Тип контура");
     gs.appendChild(optBtn("sSolid", "solid", "strokeStyle", "Сплошная"));
     gs.appendChild(optBtn("sDashed", "dashed", "strokeStyle", "Пунктир"));
     gs.appendChild(optBtn("sDotted", "dotted", "strokeStyle", "Точки"));
-    props.appendChild(gs);
 
-    // неаккуратность
-    const gsl = group("gSl");
+    const gsl = group("gSl", "Характер линии");
     gsl.appendChild(optBtn("sl1", 1, "roughness", "Художник"));
     gsl.appendChild(optBtn("sl0", 0, "roughness", "Архитектор"));
     gsl.appendChild(optBtn("sl2", 2, "roughness", "Карикатура"));
-    props.appendChild(gsl);
 
-    // грани: скруглённые / острые (эскиз) / ровные (точная геометрия)
-    const ge = group("gEd");
+    // Форма
+    const ge = group("gEd", "Форма углов");
     ge.appendChild(optBtn("edgeRound", 2, "roundness", "Скруглённые"));
     ge.appendChild(optBtn("edgeSharp", null, "roundness", "Острые"));
     ge.appendChild(optBtn("edgePlain", "plain", "roundness", "Ровные (точные)"));
-    props.appendChild(ge);
 
-    // изгиб линии/стрелки: сплайн или резкий угол
-    const glt = group("gLT");
+    const glt = group("gLT", "Изгиб");
     glt.appendChild(optBtn("ltSpline", "spline", "lineType", "Сплайн (плавная кривая)"));
     glt.appendChild(optBtn("ltSharp", "sharp", "lineType", "Резкий угол"));
-    props.appendChild(glt);
 
-    // размер шрифта
-    const gfs = group("gFS");
+    // Текст
+    const gfs = group("gFS", "Размер текста");
     for (const f of FONT_SIZES) gfs.appendChild(optBtn(null, f.v, "fontSize", "Размер " + f.t, f.t));
-    props.appendChild(gfs);
 
-    // шрифт
-    const gff = group("gFF");
+    const gff = group("gFF", "Шрифт");
     gff.appendChild(optBtn(null, 1, "fontFamily", "Рукописный", "✍"));
     gff.appendChild(optBtn(null, 2, "fontFamily", "Обычный", "A"));
     gff.appendChild(optBtn(null, 3, "fontFamily", "Код", "</>"));
-    props.appendChild(gff);
 
     updateHistoryButtons();
+  }
+
+  /* ===================== Перемещаемое окно параметров ===================== */
+  const PROPS_POS_KEY = "kamenCanvas.propsPanelPos";
+  const PANEL_MARGIN = 8;
+  let propsPos = loadPropsPos();   // null = позиция по умолчанию (по центру сверху)
+  let propsDrag = null;
+  let propsSig = "";
+
+  function loadPropsPos() {
+    try {
+      const v = JSON.parse(localStorage.getItem(PROPS_POS_KEY));
+      if (v && isFinite(v.x) && isFinite(v.y)) return { x: +v.x, y: +v.y };
+    } catch (err) {}
+    return null;
+  }
+  function savePropsPos() {
+    try {
+      if (propsPos) localStorage.setItem(PROPS_POS_KEY, JSON.stringify(propsPos));
+      else localStorage.removeItem(PROPS_POS_KEY);
+    } catch (err) {}
+  }
+  function applyPropsPos() {
+    if (!propsPos) {
+      props.style.left = props.style.top = props.style.right = props.style.transform = "";
+      return;
+    }
+    props.style.left = propsPos.x + "px";
+    props.style.top = propsPos.y + "px";
+    props.style.right = "auto";
+    props.style.transform = "none";
+  }
+  // Окно всегда целиком остаётся в пределах экрана
+  function clampPropsPos() {
+    if (!propsPos || props.classList.contains("hidden")) return;
+    const r = props.getBoundingClientRect();
+    const maxX = Math.max(PANEL_MARGIN, window.innerWidth - r.width - PANEL_MARGIN);
+    const maxY = Math.max(PANEL_MARGIN, window.innerHeight - r.height - PANEL_MARGIN);
+    const x = clamp(propsPos.x, PANEL_MARGIN, maxX);
+    const y = clamp(propsPos.y, PANEL_MARGIN, maxY);
+    if (x !== propsPos.x || y !== propsPos.y) {
+      propsPos = { x: x, y: y };
+      applyPropsPos();
+      if (!propsDrag) savePropsPos();
+    }
+  }
+  function startPropsDrag(e) {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    e.preventDefault();
+    const r = props.getBoundingClientRect();
+    propsDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    propsPos = { x: r.left, y: r.top };
+    applyPropsPos();
+    props.classList.add("dragging");
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+  function movePropsDrag(e) {
+    if (!propsDrag || e.pointerId !== propsDrag.id) return;
+    propsPos = { x: e.clientX - propsDrag.dx, y: e.clientY - propsDrag.dy };
+    applyPropsPos();
+    clampPropsPos();
+  }
+  function endPropsDrag(e) {
+    if (!propsDrag) return;
+    propsDrag = null;
+    props.classList.remove("dragging");
+    clampPropsPos();
+    savePropsPos();
+  }
+  function resetPropsPos() {
+    propsPos = null;
+    propsDrag = null;
+    props.classList.remove("dragging");
+    savePropsPos();
+    applyPropsPos();
+    toast("Окно параметров возвращено на место");
   }
 
   function setStyleProp(prop, value) {
@@ -1968,7 +2136,7 @@
     const m = { rectangle: "rectangle", diamond: "diamond", ellipse: "ellipse", arrow: "arrow", line: "line", freedraw: "freedraw", text: "text" };
     return state.tool && m[state.tool] ? [m[state.tool]] : [];
   }
-  function show(id, on) { if (groups[id]) groups[id].style.display = on ? "flex" : "none"; }
+  function show(id, on) { if (groups[id]) groups[id].style.display = on ? "grid" : "none"; }
 
   function updateContextPanel() {
     if (state.selectedElementIds.length === 1) {
@@ -1985,10 +2153,11 @@
     const hasLine = all.some((t) => t === "arrow" || t === "line" || t === "freedraw");
     const hasLinear = all.some((t) => t === "arrow" || t === "line");
     const hasText = all.some((t) => t === "text");
-    const any = all.length > 0;
+    const hasColor = hasShape || hasLine || hasText;
+    const hasSettings = hasColor || hasShape || hasLine;
 
-    show("gColors", any);
-    const bg = document.getElementById("bgWrap"); if (bg) bg.style.display = hasShape ? "contents" : "none";
+    show("gColors", hasColor);
+    show("gBg", hasShape);
     show("gFill", hasShape);
     show("gSW", hasShape || hasLine);
     show("gSS", hasShape || hasLine);
@@ -1997,6 +2166,10 @@
     show("gLT", hasLinear);
     show("gFS", hasText || hasShape);
     show("gFF", hasText || hasShape);
+    props.classList.toggle("hidden", !hasSettings);
+    // окно появилось или изменило высоту — проверяем, что оно не вышло за экран
+    const sig = hasSettings ? [hasColor, hasShape, hasLine, hasLinear, hasText, onlyShape].join("") : "hidden";
+    if (sig !== propsSig) { propsSig = sig; clampPropsPos(); }
 
     for (const prop in propButtons) {
       const val = state.style[prop];
@@ -2043,6 +2216,7 @@
     if (act === "png") exportPNG();
     else if (act === "fit") zoomToFit();
     else if (act === "reset") resetZoom();
+    else if (act === "resetPanel") resetPropsPos();
     else if (act === "clear") { if (state.elements.length && confirm("Очистить всю доску?")) { state.elements = []; clearSelection(); pushHistory(); render(); } }
   });
   document.getElementById("snapBtn").addEventListener("click", function () { setSnap(!state.snapToGrid); this.blur(); });
@@ -2057,6 +2231,7 @@
     canvas.style.width = window.innerWidth + "px";
     canvas.style.height = window.innerHeight + "px";
     render();
+    clampPropsPos();
   }
   window.addEventListener("resize", resize);
 
