@@ -249,6 +249,9 @@
   <button id="snapBtn" class="icon-btn" title="Привязка к сетке (G)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v7a7 7 0 0014 0V3h-4v7a3 3 0 01-6 0V3z"/><path d="M5 6h4M15 6h4"/></svg>
   </button>
+  <button id="bindBtn" class="icon-btn" title="Привязка линий и стрелок к фигурам (B)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="14" width="7" height="7" rx="1.4"/><circle cx="17.5" cy="6.5" r="3.5"/><path d="M9.5 14.5l5-5"/></svg>
+  </button>
   <button id="helpBtn" class="icon-btn" title="Горячие клавиши (?)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 114 2.2c-.9.6-1.6 1.1-1.6 2.1"/><path d="M12 17.2h.01"/></svg>
   </button>
@@ -405,6 +408,7 @@
     suggestedBinding: null,
     background: "dots",   // dots | lines | none
     snapToGrid: false,    // перемещение строго по сетке
+    bindToShapes: true,   // привязка линий/стрелок к фигурам
     shapeDrawMode: "corner", // corner | center — как рисовать прямоугольник/ромб/эллипс
     mouseWorld: { x: 0, y: 0 },
     mouseScreen: { x: 0, y: 0 }
@@ -757,7 +761,10 @@
     } else if (el.type === "text") {
       drawText(c, el);
     } else if (el.type === "image") {
-      if (el.image && el.image.complete) c.drawImage(el.image, el.x, el.y, el.width, el.height);
+      if (el.image && el.image.complete) {
+        c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high";
+        c.drawImage(el.image, el.x, el.y, el.width, el.height);
+      }
     }
     c.setLineDash([]);
     c.restore();
@@ -1045,6 +1052,7 @@
 
   // Фигура под точкой (для подсветки и создания привязки)
   function bindableAt(w, excludeId) {
+    if (!state.bindToShapes) return null; // привязка к фигурам выключена
     for (let i = state.elements.length - 1; i >= 0; i--) {
       const el = state.elements[i];
       if (!isBindable(el) || el.id === excludeId) continue;
@@ -1728,6 +1736,7 @@
     }
 
     if (!meta && key === "g") { setSnap(!state.snapToGrid); return; }
+    if (!meta && key === "b") { setBindToShapes(!state.bindToShapes); return; }
 
     const map = { v: "selection", h: "hand", r: "rectangle", d: "diamond", o: "ellipse", a: "arrow", l: "line", p: "freedraw", t: "text", e: "eraser" };
     if (!meta && map[key]) { setTool(map[key]); return; }
@@ -1771,10 +1780,13 @@
   /* ============================ Экспорт ============================ */
   function exportPNG() {
     if (!state.elements.length) { toast("Доска пуста"); return; }
-    const b = allBounds(), pad = 40, scale = 2;
+    const b = allBounds(), pad = 60, scale = 5; // максимальное качество — 5× (можно увеличить до 8–10 для огромных досок)
     const w = Math.ceil(b.width * scale + pad * 2), h = Math.ceil(b.height * scale + pad * 2);
     const tc = document.createElement("canvas"); tc.width = w; tc.height = h;
-    const c = tc.getContext("2d");
+    const c = tc.getContext("2d", { alpha: false });
+    // Максимальное сглаживание для экспорта
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
     c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#fff"; c.fillRect(0, 0, w, h);
     c.setTransform(scale, 0, 0, scale, pad - b.x * scale, pad - b.y * scale);
     for (const el of state.elements) drawElement(c, el);
@@ -1904,6 +1916,7 @@
     { s: "Холст", rows: [
       [["Ctrl", "колесо"], "зум к курсору"], [["Space", "тянуть"], "панорама"],
       [["колесо"], "панорама"], [["G"], "привязка к сетке"],
+      [["B"], "привязка линий к фигурам"],
       [["Shift", "1"], "по размеру доски"], [["Ctrl", "0"], "сбросить зум"],
       [["?"], "эта справка"]
     ]}
@@ -2200,6 +2213,14 @@
     menu.querySelectorAll("[data-snap]").forEach((b) => b.classList.toggle("active", (b.dataset.snap === "grid") === state.snapToGrid));
     const sb = document.getElementById("snapBtn");
     if (sb) sb.classList.toggle("active", state.snapToGrid);
+    const bb = document.getElementById("bindBtn");
+    if (bb) bb.classList.toggle("active", state.bindToShapes);
+  }
+  function setBindToShapes(on) {
+    state.bindToShapes = on;
+    if (!on) state.suggestedBinding = null; // убрать подсветку кандидата
+    updateMenuChips(); render();
+    toast(on ? "Привязка к фигурам включена" : "Привязка к фигурам выключена");
   }
   function setBackground(bg) { state.background = bg; updateMenuChips(); render(); }
   function setSnap(on) {
@@ -2224,6 +2245,7 @@
     else if (act === "clear") { if (state.elements.length && confirm("Очистить всю доску?")) { state.elements = []; clearSelection(); pushHistory(); render(); } }
   });
   document.getElementById("snapBtn").addEventListener("click", function () { setSnap(!state.snapToGrid); this.blur(); });
+  document.getElementById("bindBtn").addEventListener("click", function () { setBindToShapes(!state.bindToShapes); this.blur(); });
   document.getElementById("zoomIn").addEventListener("click", function () { zoomBy(1.2, window.innerWidth / 2, window.innerHeight / 2); this.blur(); });
   document.getElementById("zoomOut").addEventListener("click", function () { zoomBy(1 / 1.2, window.innerWidth / 2, window.innerHeight / 2); this.blur(); });
 
